@@ -43,10 +43,10 @@ object H2HDataProvider {
                 } else if (match.tournamentName.isNotBlank()) {
                     "${match.tournamentName} 2026"
                 } else {
-                    "US Open 2026"
+                    "Tennis Tournament 2026"
                 },
-                venue = match.venue.ifEmpty { "Arthur Ashe Stadium" },
-                city = "New York",
+                venue = match.venue.ifEmpty { "Center Court" },
+                city = if (match.tournamentName.contains("US Open", ignoreCase = true)) "New York" else if (match.tournamentName.contains("Wimbledon", ignoreCase = true)) "London" else if (match.tournamentName.contains("Roland Garros", ignoreCase = true)) "Paris" else if (match.tournamentName.contains("Australian Open", ignoreCase = true)) "Melbourne" else "International",
                 round = match.roundName.ifEmpty { "Final" },
                 surface = CourtSurface.HARD,
                 player1Name = p1Name,

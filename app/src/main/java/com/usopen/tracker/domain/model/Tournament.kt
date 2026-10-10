@@ -7,15 +7,17 @@ data class Tournament(
     val id: String,
     val displayName: String,
     val aliases: Set<String> = emptySet(),
-    val defaultVenue: String = "Arthur Ashe Stadium",
+    val defaultVenue: String = "Center Court",
     val isGrandSlam: Boolean = false
 ) {
     /**
      * Checks whether an event or competition tournament string matches this tournament.
      * Matches against displayName and known aliases (case-insensitive, trimmed).
+     * If tournament is 'ALL', matches any non-empty tournament.
      */
     fun matches(rawTournamentName: String?): Boolean {
         if (rawTournamentName.isNullOrBlank()) return false
+        if (this.id.equals("all", ignoreCase = true)) return true
         val clean = rawTournamentName.trim().lowercase()
         val displayClean = displayName.lowercase()
         if (clean == displayClean || clean.contains(displayClean) || displayClean.contains(clean)) {
@@ -32,6 +34,14 @@ data class Tournament(
  * Standard tournament definitions and registry.
  */
 object Tournaments {
+    val ALL = Tournament(
+        id = "all",
+        displayName = "All Tournaments",
+        aliases = setOf("All", "Any"),
+        defaultVenue = "Center Court",
+        isGrandSlam = false
+    )
+
     val US_OPEN = Tournament(
         id = "us_open",
         displayName = "US Open",
@@ -64,6 +74,38 @@ object Tournaments {
         isGrandSlam = true
     )
 
+    val INDIAN_WELLS = Tournament(
+        id = "indian_wells",
+        displayName = "Indian Wells",
+        aliases = setOf("Indian Wells", "BNP Paribas Open"),
+        defaultVenue = "Stadium 1",
+        isGrandSlam = false
+    )
+
+    val MIAMI_OPEN = Tournament(
+        id = "miami_open",
+        displayName = "Miami Open",
+        aliases = setOf("Miami Open", "Miami"),
+        defaultVenue = "Stadium Court",
+        isGrandSlam = false
+    )
+
+    val MADRID_OPEN = Tournament(
+        id = "madrid_open",
+        displayName = "Madrid Open",
+        aliases = setOf("Madrid Open", "Mutua Madrid Open"),
+        defaultVenue = "Manolo Santana Stadium",
+        isGrandSlam = false
+    )
+
+    val ITALIAN_OPEN = Tournament(
+        id = "italian_open",
+        displayName = "Italian Open",
+        aliases = setOf("Italian Open", "Rome", "Internazionali BNL d'Italia"),
+        defaultVenue = "Campo Centrale",
+        isGrandSlam = false
+    )
+
     val GRAND_SLAMS: List<Tournament> = listOf(
         US_OPEN,
         AUSTRALIAN_OPEN,
@@ -71,10 +113,22 @@ object Tournaments {
         WIMBLEDON
     )
 
+    val POPULAR_TOURNAMENTS: List<Tournament> = listOf(
+        ALL,
+        US_OPEN,
+        AUSTRALIAN_OPEN,
+        ROLAND_GARROS,
+        WIMBLEDON,
+        INDIAN_WELLS,
+        MIAMI_OPEN,
+        MADRID_OPEN,
+        ITALIAN_OPEN
+    )
+
     /**
-     * Finds a tournament by ID, defaulting to US Open if not found.
+     * Finds a tournament by ID, defaulting to ALL if not found.
      */
     fun fromId(id: String): Tournament {
-        return GRAND_SLAMS.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: US_OPEN
+        return POPULAR_TOURNAMENTS.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: ALL
     }
 }

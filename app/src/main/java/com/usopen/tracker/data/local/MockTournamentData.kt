@@ -288,7 +288,8 @@ object MockTournamentData {
         venue: String,
         startTime: String? = null,
         endTime: String? = null,
-        durationMinutes: Int? = null
+        durationMinutes: Int? = null,
+        tournamentName: String = "US Open"
     ): Match {
         val player1 = Competitor(
             id = "${id}_p1",
@@ -316,7 +317,7 @@ object MockTournamentData {
         )
         val matchWithoutLink = Match(
             id = id,
-            tournamentName = "US Open",
+            tournamentName = tournamentName,
             eventGrouping = eventGrouping,
             roundName = roundName,
             state = state,

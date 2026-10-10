@@ -116,7 +116,7 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                 }
             }
             ACTION_PINNED_SUCCESS -> {
-                Toast.makeText(context, "US Open Watchlist widget added to home screen!", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Tennis Watchlist widget added to home screen!", Toast.LENGTH_LONG).show()
                 WidgetAutoSyncManager.scheduleNextSync(context, 0L)
                 if (WidgetAutoSyncManager.isAutoSyncEnabled(context)) {
                     triggerBackgroundSync(context)

@@ -8,14 +8,14 @@ enum class MatchState {
 
 data class Match(
     val id: String,
-    val tournamentName: String = "US Open",
+    val tournamentName: String = "Tennis",
     val eventGrouping: String = "Men's Singles", // e.g. Men's Singles, Women's Singles
     val roundName: String = "",
     val state: MatchState,
     val statusDetail: String, // e.g. "Final", "In Progress - Set 3", "Scheduled 7:00 PM EDT"
     val player1: Competitor,
     val player2: Competitor,
-    val venue: String = "Arthur Ashe Stadium",
+    val venue: String = "Center Court",
     val court: String? = null,
     val startTime: String? = null,
     val endTime: String? = null,

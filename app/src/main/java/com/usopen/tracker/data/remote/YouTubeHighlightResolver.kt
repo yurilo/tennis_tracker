@@ -41,25 +41,35 @@ open class YouTubeHighlightResolver(
             "US Open Tennis Championships",
             "US Open",
             "@usopen",
+            "Wimbledon",
+            "@wimbledon",
+            "Roland Garros",
+            "@rolandgarros",
+            "Australian Open TV",
+            "@australianopen",
             "ESPN",
             "ESPN Tennis",
             "WTA",
             "ATP Tour",
-            "Tennis Channel"
+            "Tennis Channel",
+            "Tennis TV"
         )
 
         fun buildSearchQuery(match: Match): String {
             val p1 = match.player1.name.trim()
             val p2 = match.player2.name.trim()
-            val tournament = match.tournamentName.trim().ifEmpty { "US Open" }
+            val tournament = match.tournamentName.trim().ifEmpty { "Tennis" }
 
             return when {
                 p1.isNotEmpty() && p2.isNotEmpty() -> {
-                    if (tournament.contains("US Open", ignoreCase = true)) {
-                        "$p1 vs $p2 US Open highlights @usopen"
-                    } else {
-                        "$p1 vs $p2 $tournament highlights official"
+                    val channelTag = when {
+                        tournament.contains("US Open", ignoreCase = true) -> "@usopen"
+                        tournament.contains("Wimbledon", ignoreCase = true) -> "@wimbledon"
+                        tournament.contains("Roland Garros", ignoreCase = true) || tournament.contains("French Open", ignoreCase = true) -> "@rolandgarros"
+                        tournament.contains("Australian Open", ignoreCase = true) -> "@australianopen"
+                        else -> "official highlights"
                     }
+                    "$p1 vs $p2 $tournament highlights $channelTag"
                 }
                 p1.isNotEmpty() -> "$p1 $tournament highlights"
                 else -> "$tournament tennis highlights"

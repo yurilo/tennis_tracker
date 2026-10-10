@@ -276,7 +276,7 @@ fun H2HBottomSheet(
                         // Footnote
                         item {
                             Text(
-                                text = "Official ATP/WTA Head-to-Head records • US Open Tracker",
+                                text = "Official ATP/WTA Head-to-Head records • Tennis Tracker",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                 textAlign = TextAlign.Center,
@@ -867,7 +867,7 @@ private fun HistoricalMatchCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "CURRENT MATCH • US OPEN 2026",
+                        text = "CURRENT MATCH • ${match.tournamentName.ifEmpty { "TENNIS" }.uppercase()}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         color = colors.headerTitleColor

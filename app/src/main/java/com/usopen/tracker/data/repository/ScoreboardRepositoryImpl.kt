@@ -24,7 +24,7 @@ class ScoreboardRepositoryImpl(
     private val statsApi: TennisStatsApi = TennisStatsApi(),
     private val watchApi: EspnWatchApi = EspnWatchApi(),
     private val youTubeHighlightResolver: YouTubeHighlightResolver = YouTubeHighlightResolver(),
-    private var activeTournament: Tournament = Tournaments.US_OPEN
+    private var activeTournament: Tournament = Tournaments.ALL
 ) : ScoreboardRepository {
 
     init {
@@ -69,19 +69,11 @@ class ScoreboardRepositoryImpl(
             }
 
             // Attempt online fetch from ATP endpoint
-            val atpResult = if (activeTournament == Tournaments.US_OPEN) {
-                api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL)
-            } else {
-                api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, activeTournament)
-            }
+            val atpResult = api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, activeTournament)
             val atpMatches = atpResult.getOrNull() ?: emptyList()
 
             // Also attempt WTA endpoint for full Men's and Women's coverage
-            val wtaResult = if (activeTournament == Tournaments.US_OPEN) {
-                api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL)
-            } else {
-                api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, activeTournament)
-            }
+            val wtaResult = api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, activeTournament)
             val wtaMatches = wtaResult.getOrNull() ?: emptyList()
 
             val combined = mutableListOf<Match>()

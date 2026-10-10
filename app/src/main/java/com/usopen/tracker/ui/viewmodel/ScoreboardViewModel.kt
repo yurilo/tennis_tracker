@@ -46,7 +46,8 @@ data class ScoreboardUiState(
     val liveCount: Int = 0,
     val followedMatchIds: Set<String> = emptySet(),
     val followedCount: Int = 0,
-    val currentTournament: Tournament = Tournaments.US_OPEN
+    val currentTournament: Tournament = Tournaments.ALL,
+    val availableTournaments: List<Tournament> = Tournaments.POPULAR_TOURNAMENTS
 )
 
 data class MatchStatsUiState(

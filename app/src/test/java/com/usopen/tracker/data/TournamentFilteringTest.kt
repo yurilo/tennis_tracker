@@ -59,6 +59,16 @@ class TournamentFilteringTest {
         assertTrue(wimbledon.matches("Wimbledon"))
         assertTrue(wimbledon.matches("The Championships, Wimbledon"))
         assertFalse(wimbledon.matches("US Open"))
+
+        val all = Tournaments.ALL
+        assertTrue(all.matches("US Open"))
+        assertTrue(all.matches("Wimbledon"))
+        assertTrue(all.matches("Australian Open"))
+        assertTrue(all.matches("Roland Garros"))
+        assertTrue(all.matches("BNP Paribas Open"))
+        assertTrue(all.matches("Any Tour Event"))
+        assertFalse(all.matches(""))
+        assertFalse(all.matches(null))
     }
 
     @Test
@@ -140,8 +150,12 @@ class TournamentFilteringTest {
         }
         """.trimIndent()
 
-        // By default, parseScoreboardJson scopes to US Open
-        val matches = parser.parseScoreboardJson(multiTournamentJson)
+        // By default, parseScoreboardJson uses Tournaments.ALL and includes all tournaments
+        val allMatches = parser.parseScoreboardJson(multiTournamentJson)
+        assertEquals("Should contain matches from all tournaments by default", 3, allMatches.size)
+
+        // When explicitly scoped to US Open, filters to US Open
+        val matches = parser.parseScoreboardJson(multiTournamentJson, Tournaments.US_OPEN)
         assertEquals("Should only contain matches from US Open", 1, matches.size)
         assertEquals("101", matches[0].id)
         assertEquals("Carlos Alcaraz vs Jannik Sinner", matches[0].title)
@@ -288,7 +302,7 @@ class TournamentFilteringTest {
 
         MatchCacheManager.saveMatches(null, listOf(validUsOpenMatch, tbdUsOpenMatch, challengerMatch))
 
-        val repository = ScoreboardRepositoryImpl()
+        val repository = ScoreboardRepositoryImpl(activeTournament = Tournaments.US_OPEN)
         val offlineMatches = repository.getOfflineScoreboard()
 
         assertEquals("Only valid US Open match should be returned", 1, offlineMatches.size)
@@ -302,7 +316,7 @@ class TournamentFilteringTest {
     @Test
     fun `ScoreboardViewModel selectTournament updates current tournament and triggers reload`() = runTest(coroutineTestRule.dispatcher) {
         val fakeRepo = object : com.usopen.tracker.domain.repository.ScoreboardRepository {
-            private var currentTourney = Tournaments.US_OPEN
+            private var currentTourney = Tournaments.ALL
 
             override suspend fun getScoreboard(forceRefresh: Boolean): Result<List<Match>> {
                 return Result.success(emptyList())
@@ -326,7 +340,7 @@ class TournamentFilteringTest {
         )
         coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(Tournaments.US_OPEN, viewModel.uiState.value.currentTournament)
+        assertEquals(Tournaments.ALL, viewModel.uiState.value.currentTournament)
 
         viewModel.selectTournament(Tournaments.ROLAND_GARROS)
         coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()

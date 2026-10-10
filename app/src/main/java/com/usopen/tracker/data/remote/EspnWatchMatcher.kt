@@ -54,7 +54,9 @@ object EspnWatchMatcher {
             val mainCoverage = streams.firstOrNull { stream ->
                 val name = stream.name
                 (name.contains("Coverage", ignoreCase = true) || name.contains("Primetime", ignoreCase = true)) &&
-                        stream.subtitle.contains("US Open", ignoreCase = true)
+                        (stream.subtitle.contains(match.tournamentName.ifEmpty { "Tennis" }, ignoreCase = true) ||
+                         stream.subtitle.contains("Tennis", ignoreCase = true) ||
+                         stream.subtitle.contains("Open", ignoreCase = true))
             }
             if (mainCoverage != null) {
                 return mainCoverage

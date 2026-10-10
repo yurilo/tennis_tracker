@@ -1,4 +1,4 @@
-# Project: US Open Tennis Tracker
+# Project: Tennis Tracker
 
 ## Architecture
 The application follows modern Android Clean Architecture with Jetpack Compose (Material3), Coroutines, StateFlow, and a Repository pattern with dual-source resilience (Live ESPN REST API with local mock/fixture fallback).

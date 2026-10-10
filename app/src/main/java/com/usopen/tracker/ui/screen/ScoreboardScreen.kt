@@ -115,7 +115,7 @@ fun ScoreboardScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "US OPEN",
+                            text = "TENNIS",
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp,
                             color = Color.White
@@ -165,7 +165,7 @@ fun ScoreboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
-                            contentDescription = "About US Open Tracker",
+                            contentDescription = "About Tennis Tracker",
                             tint = UsOpenGold
                         )
                     }
@@ -175,7 +175,7 @@ fun ScoreboardScreen(
                             if (!requested) {
                                 Toast.makeText(
                                     context,
-                                    "To add the widget, touch & hold your home screen and choose 'US Open Watchlist'",
+                                    "To add the widget, touch & hold your home screen and choose 'Tennis Watchlist'",
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
@@ -259,6 +259,13 @@ fun ScoreboardScreen(
                 resultCount = state.filteredMatches.size
             )
 
+            // Tournament Selection Row
+            TournamentChipsRow(
+                currentTournament = state.currentTournament,
+                tournaments = state.availableTournaments,
+                onTournamentSelected = { viewModel.selectTournament(it) }
+            )
+
             // Filter Chips Row
             FilterChipsRow(
                 selectedFilter = state.selectedFilter,
@@ -280,7 +287,7 @@ fun ScoreboardScreen(
                         CircularProgressIndicator(color = UsOpenNavy)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Loading US Open matches…",
+                            text = "Loading tennis matches…",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -430,7 +437,7 @@ fun ScoreboardScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "US Open Tracker",
+                        text = "Tennis Tracker",
                         fontWeight = FontWeight.Bold,
                         color = if (isDark) UsOpenGold else UsOpenNavy
                     )
@@ -468,14 +475,14 @@ fun ScoreboardScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "Real-Time Grand Slam Experience",
+                        text = "Global Tennis Tournament Companion",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "• 🎾 Live Serving Ball indicator beside active server\n• ⚡ Point-by-point live game scores (0, 15, 30, 40, Adv, TB)\n• 📊 On-demand Head-to-Head (H2H) & Match Statistics\n• 📱 Desktop Watchlist Widget with 1-min live sync\n• 📺 Direct ESPN Watch & Replay stream launching\n• ▶️ Official YouTube Match Highlights for completed matches",
+                        text = "• 🏆 All Tournaments: Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) & ATP/WTA Tours\n• 🎾 Live Serving Ball indicator beside active server\n• ⚡ Point-by-point live game scores (0, 15, 30, 40, Adv, TB)\n• 📊 On-demand Head-to-Head (H2H) & Match Statistics\n• 👥 Singles & Doubles with official ATP and WTA player profiles\n• 📱 Desktop Watchlist Widget with 1-min live sync\n• 📺 Direct ESPN Watch & Replay stream launching\n• ▶️ Official YouTube Match Highlights for completed matches",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                         lineHeight = 18.sp
@@ -617,3 +624,43 @@ private fun FilterChipsRow(
         }
     }
 }
+
+@Composable
+private fun TournamentChipsRow(
+    currentTournament: com.usopen.tracker.domain.model.Tournament,
+    tournaments: List<com.usopen.tracker.domain.model.Tournament>,
+    onTournamentSelected: (com.usopen.tracker.domain.model.Tournament) -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val activeBg = if (isDark) UsOpenGold else UsOpenNavy
+    val activeText = if (isDark) UsOpenNavyDark else Color.White
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (tourney in tournaments) {
+            val isSelected = currentTournament.id.equals(tourney.id, ignoreCase = true)
+            FilterChip(
+                selected = isSelected,
+                onClick = { onTournamentSelected(tourney) },
+                label = {
+                    Text(
+                        text = if (tourney.id == "all") "🎾 ${tourney.displayName}" else tourney.displayName,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = activeBg,
+                    selectedLabelColor = activeText
+                )
+            )
+        }
+    }
+}
+

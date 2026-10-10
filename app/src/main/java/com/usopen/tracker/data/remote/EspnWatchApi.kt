@@ -320,18 +320,20 @@ open class EspnWatchApi(
                         subtitle.contains("Basketball", ignoreCase = true) ||
                         subtitle.contains("MLB", ignoreCase = true)
 
-                val isTennisOrUsOpen = !isOtherSport && (
-                        subtitle.contains("US Open", ignoreCase = true) ||
+                val isTennisStream = !isOtherSport && (
                         subtitle.contains("Tennis", ignoreCase = true) ||
-                        name.contains("US Open", ignoreCase = true) ||
+                        subtitle.contains("US Open", ignoreCase = true) ||
+                        subtitle.contains("Wimbledon", ignoreCase = true) ||
+                        subtitle.contains("Roland Garros", ignoreCase = true) ||
+                        subtitle.contains("Australian Open", ignoreCase = true) ||
+                        name.contains("Tennis", ignoreCase = true) ||
                         name.contains("Court", ignoreCase = true) ||
                         name.contains("Stadium", ignoreCase = true) ||
-                        name.contains("Grandstand", ignoreCase = true) ||
-                        bucketName.contains("US Open", ignoreCase = true) ||
-                        bucketName.contains("Tennis", ignoreCase = true)
+                        bucketName.contains("Tennis", ignoreCase = true) ||
+                        bucketName.contains("Open", ignoreCase = true)
                 )
 
-                if (!isTennisOrUsOpen) continue
+                if (!isTennisStream) continue
 
                 var appPlayUrl: String? = null
                 var webUrl: String? = null

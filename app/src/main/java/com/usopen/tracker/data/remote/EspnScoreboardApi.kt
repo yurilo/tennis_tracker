@@ -25,7 +25,7 @@ open class EspnScoreboardApi(
     }
 
     open fun fetchScoreboard(url: String): Result<List<Match>> {
-        return fetchScoreboard(url, Tournaments.US_OPEN)
+        return fetchScoreboard(url, Tournaments.ALL)
     }
 
     open fun fetchScoreboard(
@@ -55,7 +55,7 @@ open class EspnScoreboardApi(
 
     fun parseScoreboardJson(
         jsonString: String,
-        tournament: Tournament? = Tournaments.US_OPEN
+        tournament: Tournament? = Tournaments.ALL
     ): List<Match> {
         val root = JSONObject(jsonString)
         val events = root.optJSONArray("events") ?: return emptyList()
@@ -63,7 +63,7 @@ open class EspnScoreboardApi(
 
         for (i in 0 until events.length()) {
             val event = events.optJSONObject(i) ?: continue
-            val tournamentName = event.optString("name", "US Open")
+            val tournamentName = event.optString("name", "Tennis Tournament")
 
             if (tournament != null && !tournament.matches(tournamentName)) {
                 continue
@@ -138,9 +138,9 @@ open class EspnScoreboardApi(
                         null
                     }
                 }
-                val defaultVenue = tournament?.defaultVenue ?: "Arthur Ashe Stadium"
+                val defaultVenue = tournament?.defaultVenue ?: "Center Court"
                 val venueName = courtName
-                    ?: if (rawFullName.isNotEmpty() && !rawFullName.equals("New York, USA", ignoreCase = true)) {
+                    ?: if (rawFullName.isNotEmpty() && !rawFullName.contains("USA", ignoreCase = true)) {
                         rawFullName
                     } else {
                         defaultVenue

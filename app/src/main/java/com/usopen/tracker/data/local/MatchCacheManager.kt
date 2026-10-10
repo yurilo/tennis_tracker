@@ -143,14 +143,14 @@ object MatchCacheManager {
 
         val match = Match(
             id = obj.optString("id", ""),
-            tournamentName = obj.optString("tournamentName", "US Open"),
+            tournamentName = obj.optString("tournamentName", "Tennis"),
             eventGrouping = obj.optString("eventGrouping", "Singles"),
             roundName = obj.optString("roundName", ""),
             state = state,
             statusDetail = obj.optString("statusDetail", ""),
             player1 = if (p1Obj != null) jsonToCompetitor(p1Obj) else Competitor(id = "p1", name = "Unknown"),
             player2 = if (p2Obj != null) jsonToCompetitor(p2Obj) else Competitor(id = "p2", name = "Unknown"),
-            venue = obj.optString("venue", "Arthur Ashe Stadium"),
+            venue = obj.optString("venue", "Center Court"),
             court = obj.optString("court", "").takeIf { it.isNotEmpty() },
             startTime = obj.optString("startTime", "").takeIf { it.isNotEmpty() },
             endTime = obj.optString("endTime", "").takeIf { it.isNotEmpty() },

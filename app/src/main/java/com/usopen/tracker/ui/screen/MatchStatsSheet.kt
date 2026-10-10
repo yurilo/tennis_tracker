@@ -837,7 +837,7 @@ private fun PeriodStatsContent(
 
         // Data source footnote
         Text(
-            text = "Official live analytics powered by US Open Tracker & Sofascore",
+            text = "Official live analytics powered by Tennis Tracker & Sofascore",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
@@ -1033,7 +1033,7 @@ private fun LoadingView(loadingColor: Color) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Connecting to US Open & Sofascore data feeds",
+                text = "Connecting to live tennis & Sofascore data feeds",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
