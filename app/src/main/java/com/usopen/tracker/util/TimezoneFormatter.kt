@@ -19,14 +19,14 @@ object TimezoneFormatter {
     val NEW_YORK_ZONE: ZoneId = ZoneId.of("America/New_York")
 
     /**
-     * Parses any ISO date-time string (with or without seconds, e.g. "2026-09-05T15:30Z",
-     * "2026-09-05T15:30:00Z", "2026-09-05T15:30") into a UTC ZonedDateTime.
+     * Parses any ISO date-time string (with or without seconds, e.g. "yyyy-MM-dd'T'HH:mm'Z'",
+     * "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm") into a UTC ZonedDateTime.
      */
     fun parseToZonedDateTime(isoString: String?): ZonedDateTime? {
         if (isoString.isNullOrBlank()) return null
         val trimmed = isoString.trim()
 
-        // 1. Try ISO_DATE_TIME (handles "2026-09-05T15:30Z", "2026-09-05T15:30:00Z", etc.)
+        // 1. Try ISO_DATE_TIME (handles ISO-8601 strings with or without seconds)
         try {
             return ZonedDateTime.parse(trimmed, DateTimeFormatter.ISO_DATE_TIME)
         } catch (_: Throwable) {}
@@ -61,7 +61,7 @@ object TimezoneFormatter {
     }
 
     /**
-     * Formats an ISO-8601 UTC timestamp string (e.g. "2026-09-04T21:00Z", "2026-09-04T21:00:00Z")
+     * Formats an ISO-8601 UTC timestamp string (e.g. "yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'")
      * into the target timezone with format "MMM d • h:mm a z" (or 24-hour "MMM d • HH:mm z").
      */
     fun formatIsoToLocal(

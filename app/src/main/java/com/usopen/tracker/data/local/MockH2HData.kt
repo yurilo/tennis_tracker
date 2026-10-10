@@ -5,6 +5,8 @@ import com.usopen.tracker.domain.model.H2HSummary
 import com.usopen.tracker.domain.model.HistoricalMatch
 import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
+import java.time.LocalDate
+import java.time.Year
 
 object MockH2HData {
 
@@ -30,11 +32,19 @@ object MockH2HData {
                 }
             }.ifEmpty { "Final" }
 
+            val currentYear = Year.now().value
+            val currentDate = LocalDate.now().toString()
             val currentMatch = HistoricalMatch(
                 id = "current_${match.id}",
-                date = "2026-09-05",
-                year = 2026,
-                tournamentName = if (match.tournamentName.isNotBlank()) match.tournamentName else "Tennis Tournament 2026",
+                date = currentDate,
+                year = currentYear,
+                tournamentName = if (match.tournamentName.isNotBlank() && match.tournamentName.contains(currentYear.toString())) {
+                    match.tournamentName
+                } else if (match.tournamentName.isNotBlank()) {
+                    "${match.tournamentName} $currentYear"
+                } else {
+                    "Tennis Tournament $currentYear"
+                },
                 venue = match.venue.ifEmpty { "Center Court" },
                 city = if (match.tournamentName.contains("US Open", ignoreCase = true)) "New York" else if (match.tournamentName.contains("Wimbledon", ignoreCase = true)) "London" else "International",
                 round = match.roundName.ifEmpty { "Final" },
@@ -537,11 +547,12 @@ object MockH2HData {
         val s2 = p2.hashCode().let { if (it < 0) -it else it }
         val p1Favored = s1 > s2
 
+        val currentYear = Year.now().value
         return listOf(
             HistoricalMatch(
                 id = "gen_1",
-                date = "2024-08-14",
-                year = 2024,
+                date = "${currentYear - 1}-08-14",
+                year = currentYear - 1,
                 tournamentName = "Cincinnati Masters",
                 venue = "Center Court, Lindner Family Tennis Center",
                 city = "Cincinnati",
@@ -555,8 +566,8 @@ object MockH2HData {
             ),
             HistoricalMatch(
                 id = "gen_2",
-                date = "2024-05-12",
-                year = 2024,
+                date = "${currentYear - 1}-05-12",
+                year = currentYear - 1,
                 tournamentName = "Italian Open",
                 venue = "Campo Centrale, Foro Italico",
                 city = "Rome",
@@ -570,8 +581,8 @@ object MockH2HData {
             ),
             HistoricalMatch(
                 id = "gen_3",
-                date = "2023-09-02",
-                year = 2023,
+                date = "${currentYear - 2}-09-02",
+                year = currentYear - 2,
                 tournamentName = "US Open",
                 venue = "Louis Armstrong Stadium",
                 city = "New York",

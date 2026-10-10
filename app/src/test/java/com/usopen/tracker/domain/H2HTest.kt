@@ -11,6 +11,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.Year
 
 class H2HTest {
 
@@ -51,11 +53,58 @@ class H2HTest {
 
         val latestMatch = summary.matches[0]
         assertTrue("First match should be marked as the current match", latestMatch.isCurrentMatch)
-        assertEquals("US Open 2026", latestMatch.tournamentName)
+        assertEquals("US Open ${Year.now().value}", latestMatch.tournamentName)
+        assertEquals(Year.now().value, latestMatch.year)
+        assertEquals(LocalDate.now().toString(), latestMatch.date)
         assertEquals("Arthur Ashe Stadium", latestMatch.venue)
         assertEquals(CourtSurface.HARD, latestMatch.surface)
         assertEquals("Carlos Alcaraz", latestMatch.winnerName)
         assertTrue(latestMatch.score.contains("6-4"))
+    }
+
+    @Test
+    fun testDynamicYearAndDateResolution() {
+        val currentYear = Year.now().value
+        val currentDate = LocalDate.now().toString()
+
+        val matchWithTournament = Match(
+            id = "test-dyn-1",
+            tournamentName = "Wimbledon",
+            roundName = "Final",
+            state = MatchState.FINISHED,
+            statusDetail = "Final",
+            player1 = alcaraz,
+            player2 = sinner,
+            venue = "Centre Court"
+        )
+        val summary1 = MockH2HData.generateH2H(matchWithTournament)
+        val current1 = summary1.matches.first { it.isCurrentMatch }
+        assertEquals("Wimbledon $currentYear", current1.tournamentName)
+        assertEquals(currentYear, current1.year)
+        assertEquals(currentDate, current1.date)
+
+        val matchWithoutTournament = Match(
+            id = "test-dyn-2",
+            tournamentName = "",
+            roundName = "Final",
+            state = MatchState.FINISHED,
+            statusDetail = "Final",
+            player1 = alcaraz,
+            player2 = sinner,
+            venue = "Court 1"
+        )
+        val summary2 = MockH2HData.generateH2H(matchWithoutTournament)
+        val current2 = summary2.matches.first { it.isCurrentMatch }
+        assertEquals("Tennis Tournament $currentYear", current2.tournamentName)
+        assertEquals(currentYear, current2.year)
+        assertEquals(currentDate, current2.date)
+
+        val pastMatches = summary2.matches.filter { !it.isCurrentMatch }
+        assertTrue("Should have past matches", pastMatches.isNotEmpty())
+        for (past in pastMatches) {
+            assertTrue("Past match year ${past.year} should be <= $currentYear", past.year <= currentYear)
+            assertTrue("Past match year ${past.year} should be >= ${currentYear - 5}", past.year >= currentYear - 5)
+        }
     }
 
     @Test

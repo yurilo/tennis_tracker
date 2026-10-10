@@ -66,6 +66,7 @@ import com.usopen.tracker.ui.theme.UsOpenNavy
 import com.usopen.tracker.ui.theme.UsOpenNavyDark
 import com.usopen.tracker.ui.viewmodel.MatchFilter
 import com.usopen.tracker.ui.viewmodel.ScoreboardViewModel
+import com.usopen.tracker.ui.viewmodel.TourTierFilter
 import com.usopen.tracker.ui.widget.FollowedMatchesWidgetProvider
 import com.usopen.tracker.util.IntentLauncher
 
@@ -259,21 +260,39 @@ fun ScoreboardScreen(
                 resultCount = state.filteredMatches.size
             )
 
-            // Tournament Selection Row
-            TournamentChipsRow(
+            // 1. Tour Tier Filter Chips Row
+            TourTierChipsRow(
+                selectedTier = state.selectedTierFilter,
+                onTierSelected = { viewModel.selectTierFilter(it) }
+            )
+
+            // 2. Contextual Active Tournament Chips Row
+            ContextualTournamentChipsRow(
                 currentTournament = state.currentTournament,
-                tournaments = state.availableTournaments,
+                tournaments = state.contextualTournaments.ifEmpty { state.availableTournaments },
                 onTournamentSelected = { viewModel.selectTournament(it) }
             )
 
-            // Filter Chips Row
+            // Scoped matches count for match status filters
+            val scopedMatches = remember(state.allMatches, state.selectedTierFilter, state.currentTournament) {
+                state.allMatches.filter { match ->
+                    state.selectedTierFilter.matches(match.tournament, match) &&
+                        (state.currentTournament.id.equals("all", ignoreCase = true) ||
+                         state.currentTournament.id.startsWith("all_") ||
+                         state.currentTournament.matches(match.tournamentName) ||
+                         match.tournament?.matches(state.currentTournament.displayName) == true ||
+                         match.tournament?.id?.equals(state.currentTournament.id, ignoreCase = true) == true)
+                }
+            }
+
+            // 3. Filter Chips Row
             FilterChipsRow(
                 selectedFilter = state.selectedFilter,
-                allCount = state.allMatches.size,
-                liveCount = state.allMatches.count { it.state == MatchState.LIVE },
-                followedCount = state.followedCount,
-                upcomingCount = state.allMatches.count { it.state == MatchState.UPCOMING },
-                finishedCount = state.allMatches.count { it.state == MatchState.FINISHED },
+                allCount = scopedMatches.size,
+                liveCount = scopedMatches.count { it.state == MatchState.LIVE },
+                followedCount = scopedMatches.count { it.id in state.followedMatchIds },
+                upcomingCount = scopedMatches.count { it.state == MatchState.UPCOMING },
+                finishedCount = scopedMatches.count { it.state == MatchState.FINISHED },
                 onFilterSelected = { viewModel.setFilter(it) }
             )
 
@@ -626,31 +645,31 @@ private fun FilterChipsRow(
 }
 
 @Composable
-private fun TournamentChipsRow(
-    currentTournament: com.usopen.tracker.domain.model.Tournament,
-    tournaments: List<com.usopen.tracker.domain.model.Tournament>,
-    onTournamentSelected: (com.usopen.tracker.domain.model.Tournament) -> Unit
+fun TourTierChipsRow(
+    selectedTier: TourTierFilter,
+    onTierSelected: (TourTierFilter) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
     val activeBg = if (isDark) UsOpenGold else UsOpenNavy
     val activeText = if (isDark) UsOpenNavyDark else Color.White
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 2.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        for (tourney in tournaments) {
-            val isSelected = currentTournament.id.equals(tourney.id, ignoreCase = true)
+        for (tier in TourTierFilter.values()) {
+            val isSelected = selectedTier == tier
             FilterChip(
                 selected = isSelected,
-                onClick = { onTournamentSelected(tourney) },
+                onClick = { onTierSelected(tier) },
                 label = {
                     Text(
-                        text = if (tourney.id == "all") "🎾 ${tourney.displayName}" else tourney.displayName,
+                        text = "${tier.icon} ${tier.displayName}",
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
@@ -662,5 +681,63 @@ private fun TournamentChipsRow(
             )
         }
     }
+}
+
+@Composable
+fun ContextualTournamentChipsRow(
+    currentTournament: com.usopen.tracker.domain.model.Tournament,
+    tournaments: List<com.usopen.tracker.domain.model.Tournament>,
+    onTournamentSelected: (com.usopen.tracker.domain.model.Tournament) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = isSystemInDarkTheme()
+    val activeBg = if (isDark) UsOpenGold else UsOpenNavy
+    val activeText = if (isDark) UsOpenNavyDark else Color.White
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (tourney in tournaments) {
+            val isSelected = currentTournament.id.equals(tourney.id, ignoreCase = true)
+            val iconPrefix = when {
+                tourney.id.equals("all", ignoreCase = true) || tourney.id.startsWith("all_") -> "🎾"
+                tourney.isGrandSlam -> "🏆"
+                else -> tourney.surface.icon
+            }
+            FilterChip(
+                selected = isSelected,
+                onClick = { onTournamentSelected(tourney) },
+                label = {
+                    Text(
+                        text = "$iconPrefix ${tourney.displayName}",
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = activeBg,
+                    selectedLabelColor = activeText
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun TournamentChipsRow(
+    currentTournament: com.usopen.tracker.domain.model.Tournament,
+    tournaments: List<com.usopen.tracker.domain.model.Tournament>,
+    onTournamentSelected: (com.usopen.tracker.domain.model.Tournament) -> Unit
+) {
+    ContextualTournamentChipsRow(
+        currentTournament = currentTournament,
+        tournaments = tournaments,
+        onTournamentSelected = onTournamentSelected
+    )
 }
 

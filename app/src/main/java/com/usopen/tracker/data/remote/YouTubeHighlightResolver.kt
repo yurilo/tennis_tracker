@@ -37,22 +37,22 @@ open class YouTubeHighlightResolver(
         private const val YOUTUBE_SEARCH_URL = "https://www.youtube.com/results?search_query="
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-        val OFFICIAL_CHANNELS = listOf(
-            "US Open Tennis Championships",
-            "US Open",
+        val OFFICIAL_CHANNELS: Set<String> = setOf(
+            "us open tennis championships",
+            "us open",
             "@usopen",
-            "Wimbledon",
+            "wimbledon",
             "@wimbledon",
-            "Roland Garros",
+            "roland garros",
             "@rolandgarros",
-            "Australian Open TV",
+            "australian open tv",
             "@australianopen",
-            "ESPN",
-            "ESPN Tennis",
-            "WTA",
-            "ATP Tour",
-            "Tennis Channel",
-            "Tennis TV"
+            "espn",
+            "espn tennis",
+            "wta",
+            "atp tour",
+            "tennis channel",
+            "tennis tv"
         )
 
         fun buildSearchQuery(match: Match): String {
@@ -113,12 +113,13 @@ open class YouTubeHighlightResolver(
 
     open suspend fun resolveHighlight(match: Match): YouTubeHighlightResult? {
         if (match.state != MatchState.FINISHED) return null
-        if (!match.youtubeVideoId.isNullOrBlank()) {
+        val existingVideoId = match.youtubeVideoId
+        if (!existingVideoId.isNullOrBlank()) {
             return YouTubeHighlightResult(
-                videoId = match.youtubeVideoId,
+                videoId = existingVideoId,
                 title = "Match Highlights",
                 channel = "US Open",
-                deepLink = buildVideoDeepLink(match.youtubeVideoId)
+                deepLink = buildVideoDeepLink(existingVideoId)
             )
         }
 
@@ -174,7 +175,9 @@ open class YouTubeHighlightResolver(
                     extractVideoRenderers(root, videos)
                 }
             }
-        } catch (_: Throwable) {}
+        } catch (t: Throwable) {
+            Log.d(TAG, "ytInitialData extraction failed: ${t.message}")
+        }
 
         // 2. Fallback: regex scan for videoId and surrounding title
         if (videos.isEmpty()) {
@@ -188,7 +191,9 @@ open class YouTubeHighlightResolver(
                         videos.add(YouTubeVideo(videoId = vid, title = "US Open Highlights", channelTitle = "US Open Tennis Championships"))
                     }
                 }
-            } catch (_: Throwable) {}
+            } catch (t: Throwable) {
+                Log.d(TAG, "Regex fallback video extraction failed: ${t.message}")
+            }
         }
 
         return videos
@@ -216,13 +221,14 @@ open class YouTubeHighlightResolver(
                     }
                 }
                 val keys = json.keys()
-                while (keys.hasNext()) {
+                while (keys.hasNext() && results.size < 25) {
                     val key = keys.next()
                     extractVideoRenderers(json.get(key), results)
                 }
             }
             is JSONArray -> {
                 for (i in 0 until json.length()) {
+                    if (results.size >= 25) break
                     extractVideoRenderers(json.get(i), results)
                 }
             }
@@ -235,51 +241,51 @@ open class YouTubeHighlightResolver(
         val p1Names = EspnWatchMatcher.extractSearchNames(match.player1.name)
         val p2Names = EspnWatchMatcher.extractSearchNames(match.player2.name)
 
-        // Tier 1: Official Channel + contains both player surname tokens + "highlight" or "match"
-        val tier1 = videos.firstOrNull { video ->
-            val isOfficial = isOfficialChannel(video.channelTitle)
-            val normTitle = EspnWatchMatcher.normalize(video.title)
-            val hasP1 = p1Names.any { it.length >= 3 && normTitle.contains(it) }
-            val hasP2 = p2Names.any { it.length >= 3 && normTitle.contains(it) }
-            val isHighlight = normTitle.contains("highlight") || normTitle.contains("recap") || normTitle.contains("condensed")
-            isOfficial && hasP1 && hasP2 && isHighlight
-        }
-        if (tier1 != null) return tier1
+        var bestTier2: YouTubeVideo? = null
+        var bestTier3: YouTubeVideo? = null
+        var bestTier4: YouTubeVideo? = null
 
-        // Tier 2: Official Channel + contains both player surname tokens
-        val tier2 = videos.firstOrNull { video ->
+        // Single prioritized pass over candidate videos with cached normalization
+        for (video in videos) {
             val isOfficial = isOfficialChannel(video.channelTitle)
-            val normTitle = EspnWatchMatcher.normalize(video.title)
-            val hasP1 = p1Names.any { it.length >= 3 && normTitle.contains(it) }
-            val hasP2 = p2Names.any { it.length >= 3 && normTitle.contains(it) }
-            isOfficial && hasP1 && hasP2
-        }
-        if (tier2 != null) return tier2
-
-        // Tier 3: Contains both player surnames + "highlight" even if channel text variant
-        val tier3 = videos.firstOrNull { video ->
             val normTitle = EspnWatchMatcher.normalize(video.title)
             val hasP1 = p1Names.any { it.length >= 3 && normTitle.contains(it) }
             val hasP2 = p2Names.any { it.length >= 3 && normTitle.contains(it) }
             val isHighlight = normTitle.contains("highlight") || normTitle.contains("recap")
-            hasP1 && hasP2 && isHighlight
-        }
-        if (tier3 != null) return tier3
+            val isCondensedHighlight = isHighlight || normTitle.contains("condensed")
 
-        // Tier 4: First official video from top results (since YouTube query was @usopen targeted)
-        val tier4 = videos.firstOrNull { video ->
-            isOfficialChannel(video.channelTitle)
+            // Tier 1: Official Channel + contains both player surname tokens + "highlight" or "match"
+            if (isOfficial && hasP1 && hasP2 && isCondensedHighlight) {
+                return video
+            }
+
+            // Tier 2: Official Channel + contains both player surname tokens
+            if (bestTier2 == null && isOfficial && hasP1 && hasP2) {
+                bestTier2 = video
+            }
+
+            // Tier 3: Contains both player surnames + "highlight" even if channel text variant
+            if (bestTier3 == null && hasP1 && hasP2 && isHighlight) {
+                bestTier3 = video
+            }
+
+            // Tier 4: First official video from top results
+            if (bestTier4 == null && isOfficial) {
+                bestTier4 = video
+            }
         }
-        return tier4
+
+        return bestTier2 ?: bestTier3 ?: bestTier4
     }
 
     private fun isOfficialChannel(channel: String): Boolean {
         if (channel.isBlank()) return false
         val clean = channel.lowercase()
-        return OFFICIAL_CHANNELS.any { clean.contains(it.lowercase()) } ||
+        return clean in OFFICIAL_CHANNELS ||
                 clean.contains("us open") ||
                 clean.contains("espn") ||
                 clean.contains("atp") ||
-                clean.contains("wta")
+                clean.contains("wta") ||
+                OFFICIAL_CHANNELS.any { clean.contains(it) }
     }
 }

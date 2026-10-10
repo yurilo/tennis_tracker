@@ -1,6 +1,7 @@
 package com.usopen.tracker.data.remote
 
 import com.usopen.tracker.domain.model.Match
+import com.usopen.tracker.util.TimezoneFormatter
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -102,11 +103,13 @@ open class EspnWatchApi(
         if (!rawTime.isNullOrEmpty()) {
             val dateCandidates = mutableListOf<String>()
             try {
-                val instant = java.time.Instant.parse(rawTime)
-                val nyDate = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
-                    .withZone(java.time.ZoneId.of("America/New_York"))
-                    .format(instant)
-                dateCandidates.add(nyDate)
+                val instant = TimezoneFormatter.parseToInstant(rawTime)
+                if (instant != null) {
+                    val nyDate = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
+                        .withZone(TimezoneFormatter.NEW_YORK_ZONE)
+                        .format(instant)
+                    dateCandidates.add(nyDate)
+                }
             } catch (_: Throwable) {}
 
             val utcDate = rawTime.take(10).replace("-", "")
