@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.UsOpenTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/us_open_blue</item>
+        <item name="android:navigationBarColor">@color/us_open_blue</item>
+    </style>
+</resources>

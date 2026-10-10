@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">US Open Tracker</string>
+    <string name="tab_live">Live</string>
+    <string name="tab_upcoming">Upcoming</string>
+    <string name="tab_finished">Finished</string>
+    <string name="tab_all">All Matches</string>
+    <string name="watch_on_espn">Watch on ESPN</string>
+    <string name="live_stream">Live Stream</string>
+    <string name="replay">Match Replay</string>
+    <string name="offline_banner">Offline Mode — Showing tournament schedule and results cache</string>
+    <string name="refresh">Refresh</string>
+    <string name="loading">Loading US Open matches…</string>
+    <string name="no_matches">No matches found in this category.</string>
+    <string name="widget_name">US Open Watchlist</string>
+    <string name="widget_description">Live scores and updates for matches you follow in the US Open Tracker.</string>
+</resources>

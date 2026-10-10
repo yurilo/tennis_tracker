@@ -1,0 +1,33 @@
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.idsig
+
+# Gradle and build directories
+.gradle/
+build/
+*/build/
+app/build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local configuration
+local.properties
+
+# OS & Log files
+.DS_Store
+Thumbs.db
+*.log
+
+# Antigravity agent & environment artifacts
+.agents/
+.system_generated/
+ORIGINAL_REQUEST.md

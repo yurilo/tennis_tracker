@@ -1,0 +1,9 @@
+<resources>
+    <color name="us_open_blue">#0A2540</color>
+    <color name="us_open_gold">#FFB800</color>
+    <color name="us_open_green">#00875A</color>
+    <color name="espn_red">#CC0000</color>
+    <color name="tennis_court_blue">#1976D2</color>
+    <color name="background_light">#F8FAFC</color>
+    <color name="surface_light">#FFFFFF</color>
+</resources>
