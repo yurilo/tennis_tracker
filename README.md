@@ -2,6 +2,10 @@
 
 A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam tennis tournaments in real time, built with Jetpack Compose, Material 3, and Clean Architecture.
 
+[![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
+
+📥 **[Download Latest APK (v1.0.16)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.16/TennisTracker-v1.0.16.apk)**
+
 ---
 
 ## 🌟 Features
