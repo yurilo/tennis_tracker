@@ -14,6 +14,9 @@ import com.usopen.tracker.domain.model.MatchStatistics
 import com.usopen.tracker.domain.repository.ScoreboardRepository
 import com.usopen.tracker.domain.model.Tournament
 import com.usopen.tracker.domain.model.Tournaments
+import com.usopen.tracker.domain.model.TournamentCategory
+import com.usopen.tracker.domain.model.TournamentResolver
+import com.usopen.tracker.domain.model.TourType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +49,10 @@ data class ScoreboardUiState(
     val liveCount: Int = 0,
     val followedMatchIds: Set<String> = emptySet(),
     val followedCount: Int = 0,
-    val currentTournament: Tournament = Tournaments.US_OPEN
+    val currentTournament: Tournament = Tournaments.ALL,
+    val availableTournaments: List<Tournament> = Tournaments.POPULAR_TOURNAMENTS,
+    val selectedTierFilter: TourTierFilter = TourTierFilter.ALL,
+    val contextualTournaments: List<Tournament> = emptyList()
 )
 
 data class MatchStatsUiState(
@@ -63,7 +69,15 @@ class ScoreboardViewModel(
     private val enableAutoRefresh: Boolean = true
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ScoreboardUiState(isLoading = true, currentTournament = repository.getActiveTournament()))
+    private val _uiState = MutableStateFlow(
+        ScoreboardUiState(
+            isLoading = true,
+            currentTournament = repository.getActiveTournament(),
+            selectedTierFilter = TourTierFilter.ALL,
+            contextualTournaments = computeContextualTournaments(emptyList(), TourTierFilter.ALL),
+            availableTournaments = computeContextualTournaments(emptyList(), TourTierFilter.ALL)
+        )
+    )
     val uiState: StateFlow<ScoreboardUiState> = _uiState.asStateFlow()
 
     private val _selectedMatchForStats = MutableStateFlow<Match?>(null)
@@ -146,6 +160,8 @@ class ScoreboardViewModel(
                 followedCount = state.allMatches.count { it.id in ids },
                 filteredMatches = applyFilterAndSearch(
                     matches = state.allMatches,
+                    tier = state.selectedTierFilter,
+                    tournament = state.currentTournament,
                     filter = state.selectedFilter,
                     query = state.searchQuery,
                     followedIds = ids
@@ -193,10 +209,20 @@ class ScoreboardViewModel(
             val live = matches.count { it.state == MatchState.LIVE }
             val followed = matches.count { it.id in followedIds }
             _uiState.update { state ->
+                val contextual = computeContextualTournaments(matches, state.selectedTierFilter)
                 state.copy(
                     allMatches = matches,
                     followedMatchIds = followedIds,
-                    filteredMatches = applyFilterAndSearch(matches, state.selectedFilter, state.searchQuery, followedIds),
+                    contextualTournaments = contextual,
+                    availableTournaments = contextual,
+                    filteredMatches = applyFilterAndSearch(
+                        matches = matches,
+                        tier = state.selectedTierFilter,
+                        tournament = state.currentTournament,
+                        filter = state.selectedFilter,
+                        query = state.searchQuery,
+                        followedIds = followedIds
+                    ),
                     liveCount = live,
                     followedCount = followed,
                     isOffline = false
@@ -222,11 +248,21 @@ class ScoreboardViewModel(
                 val live = matches.count { it.state == MatchState.LIVE }
                 val followed = matches.count { it.id in followedIds }
                 _uiState.update { state ->
+                    val contextual = computeContextualTournaments(matches, state.selectedTierFilter)
                     state.copy(
                         isLoading = false,
                         allMatches = matches,
                         followedMatchIds = followedIds,
-                        filteredMatches = applyFilterAndSearch(matches, state.selectedFilter, state.searchQuery, followedIds),
+                        contextualTournaments = contextual,
+                        availableTournaments = contextual,
+                        filteredMatches = applyFilterAndSearch(
+                            matches = matches,
+                            tier = state.selectedTierFilter,
+                            tournament = state.currentTournament,
+                            filter = state.selectedFilter,
+                            query = state.searchQuery,
+                            followedIds = followedIds
+                        ),
                         liveCount = live,
                         followedCount = followed,
                         isOffline = false
@@ -248,11 +284,21 @@ class ScoreboardViewModel(
                 val live = fallback.count { it.state == MatchState.LIVE }
                 val followed = fallback.count { it.id in followedIds }
                 _uiState.update { state ->
+                    val contextual = computeContextualTournaments(fallback, state.selectedTierFilter)
                     state.copy(
                         isLoading = false,
                         allMatches = fallback,
                         followedMatchIds = followedIds,
-                        filteredMatches = applyFilterAndSearch(fallback, state.selectedFilter, state.searchQuery, followedIds),
+                        contextualTournaments = contextual,
+                        availableTournaments = contextual,
+                        filteredMatches = applyFilterAndSearch(
+                            matches = fallback,
+                            tier = state.selectedTierFilter,
+                            tournament = state.currentTournament,
+                            filter = state.selectedFilter,
+                            query = state.searchQuery,
+                            followedIds = followedIds
+                        ),
                         liveCount = live,
                         followedCount = followed,
                         isOffline = true,
@@ -267,7 +313,14 @@ class ScoreboardViewModel(
         _uiState.update { state ->
             state.copy(
                 searchQuery = query,
-                filteredMatches = applyFilterAndSearch(state.allMatches, state.selectedFilter, query, state.followedMatchIds)
+                filteredMatches = applyFilterAndSearch(
+                    matches = state.allMatches,
+                    tier = state.selectedTierFilter,
+                    tournament = state.currentTournament,
+                    filter = state.selectedFilter,
+                    query = query,
+                    followedIds = state.followedMatchIds
+                )
             )
         }
     }
@@ -278,15 +331,55 @@ class ScoreboardViewModel(
 
     fun selectTournament(tournament: Tournament) {
         repository.setActiveTournament(tournament)
-        _uiState.update { it.copy(currentTournament = tournament) }
-        loadMatches(forceRefresh = true)
+        _uiState.update { state ->
+            state.copy(
+                currentTournament = tournament,
+                filteredMatches = applyFilterAndSearch(
+                    matches = state.allMatches,
+                    tier = state.selectedTierFilter,
+                    tournament = tournament,
+                    filter = state.selectedFilter,
+                    query = state.searchQuery,
+                    followedIds = state.followedMatchIds
+                )
+            )
+        }
+    }
+
+    fun selectTierFilter(tier: TourTierFilter) {
+        _uiState.update { state ->
+            val contextual = computeContextualTournaments(state.allMatches, tier)
+            val newTournament = getTierAllTournament(tier)
+            repository.setActiveTournament(newTournament)
+            state.copy(
+                selectedTierFilter = tier,
+                currentTournament = newTournament,
+                contextualTournaments = contextual,
+                availableTournaments = contextual,
+                filteredMatches = applyFilterAndSearch(
+                    matches = state.allMatches,
+                    tier = tier,
+                    tournament = newTournament,
+                    filter = state.selectedFilter,
+                    query = state.searchQuery,
+                    followedIds = state.followedMatchIds
+                )
+            )
+        }
     }
 
     fun setFilter(filter: MatchFilter) {
         _uiState.update { state ->
             state.copy(
                 selectedFilter = filter,
-                filteredMatches = applyFilterAndSearch(state.allMatches, filter, state.searchQuery, state.followedMatchIds)
+                filteredMatches = applyFilterAndSearch(
+                    matches = state.allMatches,
+                    tier = state.selectedTierFilter,
+                    tournament = state.currentTournament,
+                    filter = filter,
+                    query = state.searchQuery,
+                    followedIds = state.followedMatchIds
+                )
             )
         }
     }
@@ -358,27 +451,63 @@ class ScoreboardViewModel(
 
     private fun applyFilterAndSearch(
         matches: List<Match>,
-        filter: MatchFilter,
-        query: String,
+        tier: TourTierFilter = _uiState.value.selectedTierFilter,
+        tournament: Tournament = _uiState.value.currentTournament,
+        filter: MatchFilter = _uiState.value.selectedFilter,
+        query: String = _uiState.value.searchQuery,
         followedIds: Set<String> = _uiState.value.followedMatchIds
     ): List<Match> {
-        val filteredByState = when (filter) {
-            MatchFilter.ALL -> matches
-            MatchFilter.LIVE -> matches.filter { it.state == MatchState.LIVE }
-            MatchFilter.FOLLOWED -> matches.filter { it.id in followedIds }
-            MatchFilter.UPCOMING -> matches.filter { it.state == MatchState.UPCOMING }
-            MatchFilter.FINISHED -> matches.filter { it.state == MatchState.FINISHED }
+        // Stage 1: Tour tier filter
+        val tierFiltered = if (tier == TourTierFilter.ALL) {
+            matches
+        } else {
+            matches.filter { match -> tier.matches(match.tournament, match) }
         }
 
+        // Stage 2: Contextual tournament filter
+        val tournamentFiltered = if (tournament.id.equals("all", ignoreCase = true) || tournament.id.startsWith("all_")) {
+            tierFiltered
+        } else {
+            tierFiltered.filter { match ->
+                tournament.matches(match.tournamentName) ||
+                    match.tournament?.matches(tournament.displayName) == true ||
+                    match.tournament?.id?.equals(tournament.id, ignoreCase = true) == true
+            }
+        }
+
+        // Stage 3: Match status filter
+        val statusFiltered = when (filter) {
+            MatchFilter.ALL -> tournamentFiltered
+            MatchFilter.LIVE -> tournamentFiltered.filter { it.state == MatchState.LIVE }
+            MatchFilter.FOLLOWED -> tournamentFiltered.filter { it.id in followedIds }
+            MatchFilter.UPCOMING -> tournamentFiltered.filter { it.state == MatchState.UPCOMING }
+            MatchFilter.FINISHED -> tournamentFiltered.filter { it.state == MatchState.FINISHED }
+        }
+
+        // Stage 4: Search query filter
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
-            return filteredByState
+            return statusFiltered
         }
 
-        return filteredByState.filter { match ->
+        return statusFiltered.filter { match ->
             matchMatchesQuery(match, trimmed)
         }
     }
+
+    private fun applyFilterAndSearch(
+        matches: List<Match>,
+        filter: MatchFilter,
+        query: String,
+        followedIds: Set<String>
+    ): List<Match> = applyFilterAndSearch(
+        matches = matches,
+        tier = _uiState.value.selectedTierFilter,
+        tournament = _uiState.value.currentTournament,
+        filter = filter,
+        query = query,
+        followedIds = followedIds
+    )
 
     private fun matchMatchesQuery(match: Match, query: String): Boolean {
         val q = query.lowercase()
@@ -469,6 +598,79 @@ class ScoreboardViewModel(
             com.usopen.tracker.ui.widget.FollowedMatchesWidgetProvider.updateAllWidgets(context)
         } catch (_: Throwable) {
             // Safe fallback during tests or prior to context attachment
+        }
+    }
+
+    companion object {
+        fun getTierAllTournament(tier: TourTierFilter): Tournament {
+            return when (tier) {
+                TourTierFilter.ALL -> Tournaments.ALL
+                TourTierFilter.GRAND_SLAMS -> Tournament(
+                    id = "all_grand_slams",
+                    displayName = "All Grand Slams",
+                    aliases = setOf("All Grand Slams", "All Majors"),
+                    isGrandSlam = true,
+                    category = TournamentCategory.GRAND_SLAM,
+                    tour = TourType.COMBINED
+                )
+                TourTierFilter.ATP_TOUR -> Tournament(
+                    id = "all_atp",
+                    displayName = "All ATP Tour",
+                    aliases = setOf("All ATP", "All ATP Tour"),
+                    tour = TourType.ATP
+                )
+                TourTierFilter.WTA_TOUR -> Tournament(
+                    id = "all_wta",
+                    displayName = "All WTA Tour",
+                    aliases = setOf("All WTA", "All WTA Tour"),
+                    tour = TourType.WTA
+                )
+                TourTierFilter.MASTERS_1000 -> Tournament(
+                    id = "all_1000s",
+                    displayName = "All 1000s",
+                    aliases = setOf("All 1000s", "All Masters 1000"),
+                    category = TournamentCategory.MASTERS_1000,
+                    tour = TourType.COMBINED
+                )
+                TourTierFilter.TIER_500_250 -> Tournament(
+                    id = "all_500_250",
+                    displayName = "All 500s/250s",
+                    aliases = setOf("All 500s/250s", "All 500s", "All 250s"),
+                    category = TournamentCategory.ATP_500,
+                    tour = TourType.COMBINED
+                )
+            }
+        }
+
+        fun computeContextualTournaments(matches: List<Match>, tier: TourTierFilter): List<Tournament> {
+            val tierAllOption = getTierAllTournament(tier)
+            val matchesInTier = if (tier == TourTierFilter.ALL) {
+                matches
+            } else {
+                matches.filter { tier.matches(it.tournament, it) }
+            }
+
+            val activeTournaments = matchesInTier.mapNotNull { match ->
+                match.tournament ?: TournamentResolver.resolve(match.tournamentName, match.eventGrouping)
+            }.filterNot {
+                it.id.equals("all", ignoreCase = true) || it.id.startsWith("all_")
+            }.distinctBy {
+                it.id.lowercase()
+            }
+
+            return if (activeTournaments.isNotEmpty()) {
+                listOf(tierAllOption) + activeTournaments
+            } else {
+                val canonicalDefaults = when (tier) {
+                    TourTierFilter.ALL -> Tournaments.POPULAR_TOURNAMENTS.filterNot { it.id == "all" }
+                    TourTierFilter.GRAND_SLAMS -> Tournaments.GRAND_SLAMS
+                    TourTierFilter.MASTERS_1000 -> Tournaments.MASTERS_1000_LIST
+                    TourTierFilter.ATP_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isAtp || it.tour == TourType.COMBINED }.take(8)
+                    TourTierFilter.WTA_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isWta || it.tour == TourType.COMBINED }.take(8)
+                    TourTierFilter.TIER_500_250 -> (Tournaments.ATP_500_LIST + Tournaments.WTA_500_LIST + Tournaments.ATP_250_LIST).take(8)
+                }
+                listOf(tierAllOption) + canonicalDefaults
+            }
         }
     }
 }

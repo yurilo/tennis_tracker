@@ -76,7 +76,7 @@ object DeepLinkGenerator {
     fun buildMatchSearchQuery(match: Match): String {
         val p1 = match.player1.name.trim()
         val p2 = match.player2.name.trim()
-        val tournament = match.tournamentName.trim().ifEmpty { "US Open" }
+        val tournament = match.tournamentName.trim().ifEmpty { "Tennis" }
         return when {
             p1.isNotEmpty() && p2.isNotEmpty() -> "$p1 vs $p2 $tournament"
             p1.isNotEmpty() -> "$p1 $tournament"

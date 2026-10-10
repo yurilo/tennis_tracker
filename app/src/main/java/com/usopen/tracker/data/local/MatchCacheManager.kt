@@ -4,8 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.usopen.tracker.data.remote.YouTubeHighlightResolver
 import com.usopen.tracker.domain.model.Competitor
+import com.usopen.tracker.domain.model.CourtSurface
 import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
+import com.usopen.tracker.domain.model.TourType
+import com.usopen.tracker.domain.model.TournamentCategory
+import com.usopen.tracker.domain.model.TournamentResolver
+import com.usopen.tracker.domain.model.Tournaments
 import com.usopen.tracker.domain.usecase.DeepLinkGenerator
 import org.json.JSONArray
 import org.json.JSONObject
@@ -125,6 +130,21 @@ object MatchCacheManager {
         if (match.espnEventId != null) obj.put("espnEventId", match.espnEventId)
         if (match.espnWatchId != null) obj.put("espnWatchId", match.espnWatchId)
         if (match.youtubeVideoId != null) obj.put("youtubeVideoId", match.youtubeVideoId)
+        if (match.tournament != null) {
+            obj.put("tournamentId", match.tournament.id)
+        }
+        val tourVal = match.tour ?: match.tournament?.tour
+        if (tourVal != null) {
+            obj.put("tour", tourVal.name)
+        }
+        val catVal = match.category ?: match.tournament?.category
+        if (catVal != null) {
+            obj.put("category", catVal.name)
+        }
+        val surfVal = match.surface ?: match.tournament?.surface
+        if (surfVal != null) {
+            obj.put("surface", surfVal.name)
+        }
         obj.put("player1", competitorToJson(match.player1))
         obj.put("player2", competitorToJson(match.player2))
         return obj
@@ -141,23 +161,52 @@ object MatchCacheManager {
         val p1Obj = obj.optJSONObject("player1")
         val p2Obj = obj.optJSONObject("player2")
 
+        val tournamentName = obj.optString("tournamentName", "Tennis")
+        val eventGrouping = obj.optString("eventGrouping", "Singles")
+
+        val tourStr = obj.optString("tour", "").takeIf { it.isNotEmpty() }
+        val tour = tourStr?.let {
+            try { TourType.valueOf(it) } catch (_: Throwable) { null }
+        }
+        val catStr = obj.optString("category", "").takeIf { it.isNotEmpty() }
+        val category = catStr?.let {
+            try { TournamentCategory.valueOf(it) } catch (_: Throwable) { null }
+        }
+        val surfaceStr = obj.optString("surface", "").takeIf { it.isNotEmpty() }
+        val surface = surfaceStr?.let {
+            try { CourtSurface.valueOf(it) } catch (_: Throwable) { null }
+        }
+        val tournamentId = obj.optString("tournamentId", "").takeIf { it.isNotEmpty() }
+
+        val resolvedTournament = when {
+            tournamentId != null -> Tournaments.ALL_CANONICAL_TOURNAMENTS.firstOrNull { it.id == tournamentId }
+                ?: TournamentResolver.resolve(tournamentName, eventGrouping)
+            tournamentName.isNotBlank() && !tournamentName.equals("Tennis", ignoreCase = true) ->
+                TournamentResolver.resolve(tournamentName, eventGrouping)
+            else -> null
+        }
+
         val match = Match(
             id = obj.optString("id", ""),
-            tournamentName = obj.optString("tournamentName", "US Open"),
-            eventGrouping = obj.optString("eventGrouping", "Singles"),
+            tournamentName = tournamentName,
+            eventGrouping = eventGrouping,
             roundName = obj.optString("roundName", ""),
             state = state,
             statusDetail = obj.optString("statusDetail", ""),
             player1 = if (p1Obj != null) jsonToCompetitor(p1Obj) else Competitor(id = "p1", name = "Unknown"),
             player2 = if (p2Obj != null) jsonToCompetitor(p2Obj) else Competitor(id = "p2", name = "Unknown"),
-            venue = obj.optString("venue", "Arthur Ashe Stadium"),
+            venue = obj.optString("venue", "Center Court"),
             court = obj.optString("court", "").takeIf { it.isNotEmpty() },
             startTime = obj.optString("startTime", "").takeIf { it.isNotEmpty() },
             endTime = obj.optString("endTime", "").takeIf { it.isNotEmpty() },
             durationMinutes = if (obj.has("durationMinutes")) obj.optInt("durationMinutes") else null,
             espnEventId = obj.optString("espnEventId", "").takeIf { it.isNotEmpty() },
             espnWatchId = obj.optString("espnWatchId", "").takeIf { it.isNotEmpty() },
-            youtubeVideoId = obj.optString("youtubeVideoId", "").takeIf { it.isNotEmpty() }
+            youtubeVideoId = obj.optString("youtubeVideoId", "").takeIf { it.isNotEmpty() },
+            tournament = resolvedTournament,
+            tour = tour ?: resolvedTournament?.tour,
+            category = category ?: resolvedTournament?.category,
+            surface = surface ?: resolvedTournament?.surface
         )
         val withDeepLink = match.copy(deepLink = DeepLinkGenerator.generate(match))
         return if (state == MatchState.FINISHED) {

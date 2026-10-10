@@ -5,6 +5,7 @@ import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
 import com.usopen.tracker.domain.model.PlayerPhotoProvider
 import com.usopen.tracker.domain.model.Tournament
+import com.usopen.tracker.domain.model.TournamentResolver
 import com.usopen.tracker.domain.model.Tournaments
 import com.usopen.tracker.domain.usecase.DeepLinkGenerator
 import okhttp3.OkHttpClient
@@ -22,10 +23,13 @@ open class EspnScoreboardApi(
     companion object {
         const val ATP_SCOREBOARD_URL = "https://site.web.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard"
         const val WTA_SCOREBOARD_URL = "https://site.web.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard"
+        private val ATHLETE_ID_REGEX = Regex("/id/(\\d+)")
+        private val SLASH_DELIMITER_REGEX = Regex("\\s*/\\s*")
+        private val VALID_TENNIS_POINTS = setOf("0", "15", "30", "40", "A", "Adv", "ADV", "Ad", "AD", "Deuce", "DEUCE")
     }
 
     open fun fetchScoreboard(url: String): Result<List<Match>> {
-        return fetchScoreboard(url, Tournaments.US_OPEN)
+        return fetchScoreboard(url, Tournaments.ALL)
     }
 
     open fun fetchScoreboard(
@@ -55,34 +59,34 @@ open class EspnScoreboardApi(
 
     fun parseScoreboardJson(
         jsonString: String,
-        tournament: Tournament? = Tournaments.US_OPEN
+        tournament: Tournament? = Tournaments.ALL
     ): List<Match> {
         val root = JSONObject(jsonString)
         val events = root.optJSONArray("events") ?: return emptyList()
         val matchList = mutableListOf<Match>()
 
-        for (i in 0 until events.length()) {
-            val event = events.optJSONObject(i) ?: continue
-            val tournamentName = event.optString("name", "US Open")
+        events.forEachJsonObject { event ->
+            val tournamentName = event.optString("name", "Tennis Tournament")
 
-            if (tournament != null && !tournament.matches(tournamentName)) {
-                continue
-            }
+            if (tournament == null || tournament.matches(tournamentName)) {
+                val groupings = event.optJSONArray("groupings")
 
-            val groupings = event.optJSONArray("groupings")
-
-            if (groupings != null && groupings.length() > 0) {
-                for (g in 0 until groupings.length()) {
-                    val groupObj = groupings.optJSONObject(g) ?: continue
-                    val groupingInfo = groupObj.optJSONObject("grouping")
-                    val groupDisplayName = groupingInfo?.optString("displayName") ?: "Singles"
-                    val competitions = groupObj.optJSONArray("competitions") ?: continue
-                    parseCompetitions(competitions, tournamentName, groupDisplayName, matchList, tournament)
+                if (groupings != null && groupings.length() > 0) {
+                    groupings.forEachJsonObject { groupObj ->
+                        val groupingInfo = groupObj.optJSONObject("grouping")
+                        val groupDisplayName = groupingInfo?.optString("displayName") ?: "Singles"
+                        val competitions = groupObj.optJSONArray("competitions")
+                        if (competitions != null) {
+                            parseCompetitions(competitions, tournamentName, groupDisplayName, matchList, tournament, event)
+                        }
+                    }
+                } else {
+                    // Fallback for direct competitions array
+                    val competitions = event.optJSONArray("competitions")
+                    if (competitions != null) {
+                        parseCompetitions(competitions, tournamentName, "Main Draw", matchList, tournament, event)
+                    }
                 }
-            } else {
-                // Fallback for direct competitions array
-                val competitions = event.optJSONArray("competitions") ?: continue
-                parseCompetitions(competitions, tournamentName, "Main Draw", matchList, tournament)
             }
         }
         return matchList
@@ -93,107 +97,111 @@ open class EspnScoreboardApi(
         tournamentName: String,
         groupingName: String,
         output: MutableList<Match>,
-        tournament: Tournament? = null
+        tournament: Tournament? = null,
+        eventJson: JSONObject? = null
     ) {
-        for (j in 0 until competitions.length()) {
-            val comp = competitions.optJSONObject(j) ?: continue
+        val resolvedTournament = TournamentResolver.resolve(tournamentName, groupingName, eventJson)
+
+        competitions.forEachJsonObject { comp ->
             val compId = comp.optString("id", "")
-            if (compId.isEmpty()) continue
+            if (compId.isNotEmpty()) {
+                val statusObj = comp.optJSONObject("status")
+                val typeObj = statusObj?.optJSONObject("type")
+                val stateStr = typeObj?.optString("state", "pre") ?: "pre"
+                val isCompleted = typeObj?.optBoolean("completed", false) ?: false
+                val statusDesc = typeObj?.optString("description", "Scheduled") ?: "Scheduled"
+                val statusDetailStr = typeObj?.optString("detail", "") ?: ""
 
-            val statusObj = comp.optJSONObject("status")
-            val typeObj = statusObj?.optJSONObject("type")
-            val stateStr = typeObj?.optString("state", "pre") ?: "pre"
-            val isCompleted = typeObj?.optBoolean("completed", false) ?: false
-            val statusDesc = typeObj?.optString("description", "Scheduled") ?: "Scheduled"
-            val statusDetailStr = typeObj?.optString("detail", "") ?: ""
+                val roundObj = comp.optJSONObject("round")
+                val roundDisplayName = roundObj?.optString("displayName", "") ?: ""
 
-            val roundObj = comp.optJSONObject("round")
-            val roundDisplayName = roundObj?.optString("displayName", "") ?: ""
-
-            val matchState = when {
-                stateStr == "in" -> MatchState.LIVE
-                stateStr == "post" || isCompleted -> MatchState.FINISHED
-                else -> MatchState.UPCOMING
-            }
-
-            val roundName = if (roundDisplayName.isNotEmpty()) roundDisplayName else statusDesc
-
-            val competitorsJson = comp.optJSONArray("competitors")
-            val competitors = parseCompetitors(competitorsJson, matchState, comp)
-
-            if (competitors.size >= 2) {
-                val p1 = competitors[0]
-                val p2 = competitors[1]
-                if (p1.isTbdOrPlaceholder || p2.isTbdOrPlaceholder) {
-                    continue
+                val matchState = when {
+                    stateStr == "in" -> MatchState.LIVE
+                    stateStr == "post" || isCompleted -> MatchState.FINISHED
+                    else -> MatchState.UPCOMING
                 }
 
-                val venueObj = comp.optJSONObject("venue")
-                val rawCourt = venueObj?.optString("court", "")?.trim() ?: ""
-                val rawFullName = venueObj?.optString("fullName", "")?.trim() ?: ""
-                val courtName = rawCourt.ifEmpty {
-                    if (rawFullName.isNotEmpty() && !rawFullName.equals("New York, USA", ignoreCase = true)) {
-                        rawFullName
-                    } else {
-                        null
+                val roundName = if (roundDisplayName.isNotEmpty()) roundDisplayName else statusDesc
+
+                val competitorsJson = comp.optJSONArray("competitors")
+                val competitors = parseCompetitors(competitorsJson, matchState, comp)
+
+                if (competitors.size >= 2) {
+                    val p1 = competitors[0]
+                    val p2 = competitors[1]
+                    if (!p1.isTbdOrPlaceholder && !p2.isTbdOrPlaceholder) {
+                        val venueObj = comp.optJSONObject("venue")
+                        val rawCourt = venueObj?.optString("court", "")?.trim() ?: ""
+                        val rawFullName = venueObj?.optString("fullName", "")?.trim() ?: ""
+                        val courtName = rawCourt.ifEmpty {
+                            if (rawFullName.isNotEmpty() && !rawFullName.equals("New York, USA", ignoreCase = true)) {
+                                rawFullName
+                            } else {
+                                null
+                            }
+                        }
+                        val defaultVenue = tournament?.defaultVenue ?: resolvedTournament.defaultVenue
+                        val venueName = courtName
+                            ?: if (rawFullName.isNotEmpty() && !rawFullName.contains("USA", ignoreCase = true)) {
+                                rawFullName
+                            } else {
+                                defaultVenue
+                            }
+                        val startDate = comp.optString("startDate", "").ifEmpty { comp.optString("date", "") }
+                        val endDate = comp.optString("endDate", "")
+
+                        val durationFromClock = parseDurationMinutes(statusObj)
+                        val durationMinutes = when {
+                            durationFromClock != null -> durationFromClock
+                            startDate.isNotEmpty() && endDate.isNotEmpty() -> {
+                                try {
+                                    val start = com.usopen.tracker.util.TimezoneFormatter.parseToInstant(startDate) ?: java.time.Instant.parse(startDate)
+                                    val end = com.usopen.tracker.util.TimezoneFormatter.parseToInstant(endDate) ?: java.time.Instant.parse(endDate)
+                                    java.time.Duration.between(start, end).toMinutes().toInt().takeIf { it > 0 }
+                                } catch (_: Throwable) { null }
+                            }
+                            else -> null
+                        }
+
+                        val isMatchInTiebreak = matchState == MatchState.LIVE && competitors.any {
+                            it.tiebreakScores.lastOrNull() != null
+                        }
+
+                        val statusDetail = when {
+                            isMatchInTiebreak && !statusDetailStr.contains("Tiebreak", ignoreCase = true) ->
+                                if (statusDetailStr.isNotEmpty()) "$statusDesc • $statusDetailStr (Tiebreak)" else "$statusDesc • Tiebreak"
+                            matchState == MatchState.LIVE && statusDetailStr.isNotEmpty() && statusDetailStr != statusDesc ->
+                                "$statusDesc • $statusDetailStr"
+                            matchState == MatchState.FINISHED && roundDisplayName.isNotEmpty() ->
+                                "Final • $roundDisplayName"
+                            matchState == MatchState.UPCOMING && statusDetailStr.isNotEmpty() && statusDetailStr != statusDesc ->
+                                statusDetailStr
+                            else -> statusDesc
+                        }
+
+                        val match = Match(
+                            id = compId,
+                            tournamentName = tournamentName,
+                            eventGrouping = groupingName,
+                            roundName = roundName,
+                            state = matchState,
+                            statusDetail = statusDetail,
+                            player1 = p1,
+                            player2 = p2,
+                            venue = venueName,
+                            court = courtName,
+                            startTime = if (startDate.isNotEmpty()) startDate else null,
+                            endTime = if (endDate.isNotEmpty()) endDate else null,
+                            durationMinutes = durationMinutes,
+                            espnEventId = compId,
+                            tournament = resolvedTournament,
+                            tour = resolvedTournament.tour,
+                            category = resolvedTournament.category,
+                            surface = resolvedTournament.surface
+                        )
+                        output.add(match.copy(deepLink = DeepLinkGenerator.generate(match)))
                     }
                 }
-                val defaultVenue = tournament?.defaultVenue ?: "Arthur Ashe Stadium"
-                val venueName = courtName
-                    ?: if (rawFullName.isNotEmpty() && !rawFullName.equals("New York, USA", ignoreCase = true)) {
-                        rawFullName
-                    } else {
-                        defaultVenue
-                    }
-                val startDate = comp.optString("startDate", "").ifEmpty { comp.optString("date", "") }
-                val endDate = comp.optString("endDate", "")
-
-                val durationFromClock = parseDurationMinutes(statusObj)
-                val durationMinutes = when {
-                    durationFromClock != null -> durationFromClock
-                    startDate.isNotEmpty() && endDate.isNotEmpty() -> {
-                        try {
-                            val start = com.usopen.tracker.util.TimezoneFormatter.parseToInstant(startDate) ?: java.time.Instant.parse(startDate)
-                            val end = com.usopen.tracker.util.TimezoneFormatter.parseToInstant(endDate) ?: java.time.Instant.parse(endDate)
-                            java.time.Duration.between(start, end).toMinutes().toInt().takeIf { it > 0 }
-                        } catch (_: Throwable) { null }
-                    }
-                    else -> null
-                }
-
-                val isMatchInTiebreak = matchState == MatchState.LIVE && competitors.any {
-                    it.tiebreakScores.lastOrNull() != null
-                }
-
-                val statusDetail = when {
-                    isMatchInTiebreak && !statusDetailStr.contains("Tiebreak", ignoreCase = true) ->
-                        if (statusDetailStr.isNotEmpty()) "$statusDesc • $statusDetailStr (Tiebreak)" else "$statusDesc • Tiebreak"
-                    matchState == MatchState.LIVE && statusDetailStr.isNotEmpty() && statusDetailStr != statusDesc ->
-                        "$statusDesc • $statusDetailStr"
-                    matchState == MatchState.FINISHED && roundDisplayName.isNotEmpty() ->
-                        "Final • $roundDisplayName"
-                    matchState == MatchState.UPCOMING && statusDetailStr.isNotEmpty() && statusDetailStr != statusDesc ->
-                        statusDetailStr
-                    else -> statusDesc
-                }
-
-                val match = Match(
-                    id = compId,
-                    tournamentName = tournamentName,
-                    eventGrouping = groupingName,
-                    roundName = roundName,
-                    state = matchState,
-                    statusDetail = statusDetail,
-                    player1 = p1,
-                    player2 = p2,
-                    venue = venueName,
-                    court = courtName,
-                    startTime = if (startDate.isNotEmpty()) startDate else null,
-                    endTime = if (endDate.isNotEmpty()) endDate else null,
-                    durationMinutes = durationMinutes,
-                    espnEventId = compId
-                )
-                output.add(match.copy(deepLink = DeepLinkGenerator.generate(match)))
             }
         }
     }
@@ -259,16 +267,11 @@ open class EspnScoreboardApi(
             val linescores = compObj.optJSONArray("linescores")
             val setScores = mutableListOf<Int>()
             val tiebreakScores = mutableListOf<Int?>()
-            if (linescores != null) {
-                for (s in 0 until linescores.length()) {
-                    val ls = linescores.optJSONObject(s)
-                    val value = ls?.optDouble("value", 0.0)?.toInt() ?: 0
-                    val tiebreak = if (ls != null && ls.has("tiebreak")) {
-                        ls.optInt("tiebreak")
-                    } else null
-                    setScores.add(value)
-                    tiebreakScores.add(tiebreak)
-                }
+            linescores?.forEachJsonObject { ls ->
+                val value = ls.optDouble("value", 0.0).toInt()
+                val tiebreak = if (ls.has("tiebreak")) ls.optInt("tiebreak") else null
+                setScores.add(value)
+                tiebreakScores.add(tiebreak)
             }
 
             val lastSetTiebreak = tiebreakScores.lastOrNull()
@@ -281,22 +284,20 @@ open class EspnScoreboardApi(
             }?.trim()
 
             val isValidTennisPoint = rawCandidate != null && (
-                rawCandidate in listOf("0", "15", "30", "40", "A", "Adv", "ADV", "Ad", "AD", "Deuce", "DEUCE") ||
+                rawCandidate in VALID_TENNIS_POINTS ||
                 rawCandidate.startsWith("TB", ignoreCase = true) ||
                 (rawCandidate.all { it.isDigit() } && (rawCandidate.toIntOrNull() ?: -1) in 0..99)
             )
 
-            val gameScore = when {
-                isValidTennisPoint -> {
-                    when {
-                        rawCandidate!!.equals("A", ignoreCase = true) || rawCandidate.equals("Ad", ignoreCase = true) -> "Adv"
-                        rawCandidate.equals("Deuce", ignoreCase = true) -> "40"
-                        else -> rawCandidate
-                    }
+            val gameScore = if (rawCandidate != null && isValidTennisPoint) {
+                when {
+                    rawCandidate.equals("A", ignoreCase = true) || rawCandidate.equals("Ad", ignoreCase = true) -> "Adv"
+                    rawCandidate.equals("Deuce", ignoreCase = true) -> "40"
+                    else -> rawCandidate
                 }
+            } else when {
                 matchState == MatchState.LIVE && lastSetTiebreak != null -> "TB $lastSetTiebreak"
                 matchState == MatchState.LIVE && setScores.isNotEmpty() && setScores.last() >= 6 -> {
-                    // Check if tiebreak
                     lastSetTiebreak?.let { "TB $it" } ?: if (rawServing) "40" else "30"
                 }
                 matchState == MatchState.LIVE -> if (rawServing) "40" else "30"
@@ -314,8 +315,7 @@ open class EspnScoreboardApi(
             val individualPlayers = mutableListOf<Competitor>()
             val athletesArray = roster?.optJSONArray("athletes")
             if (athletesArray != null && athletesArray.length() >= 2) {
-                for (a in 0 until athletesArray.length()) {
-                    val athObj = athletesArray.optJSONObject(a) ?: continue
+                athletesArray.forEachJsonObject { athObj ->
                     val athName = athObj.optString("displayName")
                         .ifEmpty { athObj.optString("fullName") }
                         .ifEmpty { athObj.optString("name") }
@@ -324,13 +324,12 @@ open class EspnScoreboardApi(
                     var athId = athObj.optString("id", "")
                     if (athId.isEmpty()) {
                         val links = athObj.optJSONArray("links")
-                        if (links != null) {
-                            for (l in 0 until links.length()) {
-                                val href = links.optJSONObject(l)?.optString("href", "") ?: ""
-                                val m = Regex("/id/(\\d+)").find(href)
+                        links?.forEachJsonObject { linkObj ->
+                            if (athId.isEmpty()) {
+                                val href = linkObj.optString("href", "")
+                                val m = ATHLETE_ID_REGEX.find(href)
                                 if (m != null) {
                                     athId = m.groupValues[1]
-                                    break
                                 }
                             }
                         }
@@ -344,7 +343,7 @@ open class EspnScoreboardApi(
                     )
                     individualPlayers.add(
                         Competitor(
-                            id = athId.ifEmpty { "${id}_$a" },
+                            id = athId.ifEmpty { "${id}_${individualPlayers.size}" },
                             name = athName,
                             seed = seed,
                             country = athCountry,
@@ -353,9 +352,9 @@ open class EspnScoreboardApi(
                     )
                 }
             } else if (displayName.contains(" / ") || (displayName.contains("/") && !displayName.contains("http"))) {
-                val parts = displayName.split(Regex("\\s*/\\s*")).filter { it.isNotBlank() }
+                val parts = displayName.split(SLASH_DELIMITER_REGEX).filter { it.isNotBlank() }
                 if (parts.size >= 2) {
-                    val countries = country?.split(Regex("\\s*/\\s*")) ?: emptyList()
+                    val countries = country?.split(SLASH_DELIMITER_REGEX) ?: emptyList()
                     parts.forEachIndexed { idx, pName ->
                         val trimmed = pName.trim()
                         val partnerCountry = countries.getOrNull(idx)?.trim() ?: country
@@ -439,4 +438,31 @@ open class EspnScoreboardApi(
 
         return list
     }
+}
+
+/**
+ * Idiomatic Kotlin helper extension functions for traversing JSON arrays.
+ */
+private inline fun JSONArray.forEachJsonObject(action: (JSONObject) -> Unit) {
+    for (i in 0 until length()) {
+        optJSONObject(i)?.let(action)
+    }
+}
+
+private inline fun <R> JSONArray.mapJsonObjects(transform: (JSONObject) -> R): List<R> {
+    val list = ArrayList<R>(length())
+    for (i in 0 until length()) {
+        optJSONObject(i)?.let { list.add(transform(it)) }
+    }
+    return list
+}
+
+private inline fun <R> JSONArray.mapNotNullJsonObjects(transform: (JSONObject) -> R?): List<R> {
+    val list = ArrayList<R>(length())
+    for (i in 0 until length()) {
+        optJSONObject(i)?.let { obj ->
+            transform(obj)?.let { list.add(it) }
+        }
+    }
+    return list
 }

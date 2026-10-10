@@ -24,16 +24,20 @@ class ScoreboardRepositoryImpl(
     private val statsApi: TennisStatsApi = TennisStatsApi(),
     private val watchApi: EspnWatchApi = EspnWatchApi(),
     private val youTubeHighlightResolver: YouTubeHighlightResolver = YouTubeHighlightResolver(),
-    private var activeTournament: Tournament = Tournaments.US_OPEN
+    @Volatile
+    private var activeTournament: Tournament = Tournaments.ALL
 ) : ScoreboardRepository {
+
+    private val threadLocalTournament = ThreadLocal<Tournament>()
 
     init {
         context?.let { appContext = it.applicationContext }
     }
 
-    override fun getActiveTournament(): Tournament = activeTournament
+    override fun getActiveTournament(): Tournament = threadLocalTournament.get() ?: activeTournament
 
     override fun setActiveTournament(tournament: Tournament) {
+        threadLocalTournament.set(tournament)
         activeTournament = tournament
     }
 
@@ -47,128 +51,117 @@ class ScoreboardRepositoryImpl(
         tournament: Tournament,
         forceRefresh: Boolean
     ): Result<List<Match>> {
-        val previous = activeTournament
-        activeTournament = tournament
-        return try {
-            getScoreboard(forceRefresh)
-        } finally {
-            activeTournament = previous
-        }
+        return getScoreboardInternal(tournament, forceRefresh)
     }
 
     override suspend fun getScoreboard(forceRefresh: Boolean): Result<List<Match>> {
-        return withContext(Dispatchers.IO) {
-            if (!forceRefresh) {
-                val cached = MatchCacheManager.loadMatches(appContext)
-                val filteredCached = cached.filter {
-                    activeTournament.matches(it.tournamentName) && it.hasValidCompetitors
-                }
-                if (filteredCached.isNotEmpty()) {
-                    return@withContext Result.success(sortMatches(filteredCached))
-                }
+        return getScoreboardInternal(activeTournament, forceRefresh)
+    }
+
+    private suspend fun getScoreboardInternal(
+        targetTournament: Tournament,
+        forceRefresh: Boolean
+    ): Result<List<Match>> = withContext(Dispatchers.IO) {
+        var cachedMatches: List<Match>? = null
+        fun loadCached(): List<Match> {
+            val current = cachedMatches
+            if (current != null) return current
+            val loaded = MatchCacheManager.loadMatches(appContext)
+            cachedMatches = loaded
+            return loaded
+        }
+
+        if (!forceRefresh) {
+            val filteredCached = filterMatches(loadCached(), targetTournament)
+            if (filteredCached.isNotEmpty()) {
+                return@withContext Result.success(sortMatches(filteredCached))
+            }
+        }
+
+        // Attempt online fetch from ATP endpoint
+        val atpResult = api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, targetTournament)
+        val atpMatches = atpResult.getOrNull() ?: emptyList()
+
+        // Also attempt WTA endpoint for full Men's and Women's coverage
+        val wtaResult = api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, targetTournament)
+        val wtaMatches = wtaResult.getOrNull() ?: emptyList()
+
+        // Deduplicate ATP and WTA match feeds in O(N + M) time preserving first occurrence
+        val combined = (atpMatches + wtaMatches).distinctBy { it.id }
+
+        // Strictly scope matches to target tournament and exclude invalid TBD matchups
+        val scopedMatches = filterMatches(combined, targetTournament)
+
+        if (scopedMatches.isNotEmpty()) {
+            // Enrich live matches with authentic real-time game scores
+            val liveScores = try {
+                statsApi.fetchLiveGameScores(scopedMatches)
+            } catch (t: Throwable) {
+                Log.w("ScoreboardRepo", "Failed to fetch live game scores: ${t.message}")
+                emptyMap()
             }
 
-            // Attempt online fetch from ATP endpoint
-            val atpResult = if (activeTournament == Tournaments.US_OPEN) {
-                api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL)
-            } else {
-                api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, activeTournament)
-            }
-            val atpMatches = atpResult.getOrNull() ?: emptyList()
-
-            // Also attempt WTA endpoint for full Men's and Women's coverage
-            val wtaResult = if (activeTournament == Tournaments.US_OPEN) {
-                api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL)
-            } else {
-                api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, activeTournament)
-            }
-            val wtaMatches = wtaResult.getOrNull() ?: emptyList()
-
-            val combined = mutableListOf<Match>()
-            combined.addAll(atpMatches)
-            for (m in wtaMatches) {
-                if (combined.none { it.id == m.id }) {
-                    combined.add(m)
+            val withScores = if (liveScores.isNotEmpty()) {
+                scopedMatches.map { match ->
+                    val pair = liveScores[match.id]
+                    if (pair != null) {
+                        match.copy(
+                            player1 = match.player1.copy(currentGameScore = pair.first),
+                            player2 = match.player2.copy(currentGameScore = pair.second)
+                        )
+                    } else match
                 }
-            }
+            } else scopedMatches
 
-            // Strictly scope matches to target tournament and exclude invalid TBD matchups
-            val scopedMatches = combined.filter {
-                activeTournament.matches(it.tournamentName) && it.hasValidCompetitors
-            }
+            // Load existing cached matches to preserve any previously resolved espnWatchIds & youtubeVideoIds
+            val existingCacheMap = loadCached().associateBy { it.id }
 
-            if (scopedMatches.isNotEmpty()) {
-                // Enrich live matches with authentic real-time game scores
-                val liveScores = try {
-                    statsApi.fetchLiveGameScores(scopedMatches)
-                } catch (t: Throwable) {
-                    Log.w("ScoreboardRepo", "Failed to fetch live game scores: ${t.message}")
-                    emptyMap()
-                }
-
-                val withScores = if (liveScores.isNotEmpty()) {
-                    scopedMatches.map { match ->
-                        val pair = liveScores[match.id]
-                        if (pair != null) {
-                            match.copy(
-                                player1 = match.player1.copy(currentGameScore = pair.first),
-                                player2 = match.player2.copy(currentGameScore = pair.second)
-                            )
-                        } else match
-                    }
-                } else scopedMatches
-
-                // Load existing cached matches to preserve any previously resolved espnWatchIds & youtubeVideoIds
-                val existingCacheMap = MatchCacheManager.loadMatches(appContext).associateBy { it.id }
-
-                val finalMatches = withScores.map { match ->
-                    val existing = existingCacheMap[match.id]
-                    val watchId = existing?.espnWatchId ?: match.espnWatchId
-                    val ytVideoId = existing?.youtubeVideoId ?: match.youtubeVideoId
-                    val m = match.copy(
-                        espnWatchId = watchId,
-                        youtubeVideoId = ytVideoId
-                    )
-                    val withDeepLink = m.copy(deepLink = DeepLinkGenerator.generate(m))
-                    if (m.state == MatchState.FINISHED) {
-                        withDeepLink.copy(youtubeDeepLink = YouTubeHighlightResolver.generateDeepLink(withDeepLink))
-                    } else {
-                        withDeepLink
-                    }
-                }
-
-                val sorted = sortMatches(finalMatches)
-                MatchCacheManager.saveMatches(appContext, sorted)
-                Result.success(sorted)
-            } else {
-                // If network returned empty or failed, fall back to local cached matches if available
-                val cached = MatchCacheManager.loadMatches(appContext)
-                val filteredCached = cached.filter {
-                    activeTournament.matches(it.tournamentName) && it.hasValidCompetitors
-                }
-                if (filteredCached.isNotEmpty()) {
-                    Result.success(sortMatches(filteredCached))
+            val finalMatches = withScores.map { match ->
+                val existing = existingCacheMap[match.id]
+                val watchId = existing?.espnWatchId ?: match.espnWatchId
+                val ytVideoId = existing?.youtubeVideoId ?: match.youtubeVideoId
+                val m = match.copy(
+                    espnWatchId = watchId,
+                    youtubeVideoId = ytVideoId
+                )
+                val withDeepLink = m.copy(deepLink = DeepLinkGenerator.generate(m))
+                if (m.state == MatchState.FINISHED) {
+                    withDeepLink.copy(youtubeDeepLink = YouTubeHighlightResolver.generateDeepLink(withDeepLink))
                 } else {
-                    Result.failure(Exception("Scoreboard data unavailable. Connect to internet to sync."))
+                    withDeepLink
                 }
+            }
+
+            val sorted = sortMatches(finalMatches)
+            val existingCached = loadCached()
+            val updatedIds = sorted.map { it.id }.toSet()
+            val mergedCache = existingCached.filterNot { it.id in updatedIds } + sorted
+            MatchCacheManager.saveMatches(appContext, mergedCache)
+            Result.success(sorted)
+        } else {
+            // If network returned empty or failed, fall back to local cached matches if available
+            val filteredCached = filterMatches(loadCached(), targetTournament)
+            if (filteredCached.isNotEmpty()) {
+                Result.success(sortMatches(filteredCached))
+            } else {
+                Result.failure(Exception("Scoreboard data unavailable. Connect to internet to sync."))
             }
         }
     }
 
     override fun getOfflineScoreboard(): List<Match> {
-        val cached = MatchCacheManager.loadMatches(appContext)
-        val filtered = cached.filter {
-            activeTournament.matches(it.tournamentName) && it.hasValidCompetitors
-        }
-        return sortMatches(filtered)
+        return getOfflineScoreboardForTournament(activeTournament)
     }
 
     override fun getOfflineScoreboardForTournament(tournament: Tournament): List<Match> {
         val cached = MatchCacheManager.loadMatches(appContext)
-        val filtered = cached.filter {
+        return sortMatches(filterMatches(cached, tournament))
+    }
+
+    private fun filterMatches(matches: List<Match>, tournament: Tournament): List<Match> {
+        return matches.filter {
             tournament.matches(it.tournamentName) && it.hasValidCompetitors
         }
-        return sortMatches(filtered)
     }
 
     override suspend fun resolveWatchStreamForMatch(match: Match): Match {

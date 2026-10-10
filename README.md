@@ -1,11 +1,13 @@
-# US Open Tennis Tracker 🎾
+# Tennis Tracker 🎾
 
-A modern Android application for tracking US Open and Grand Slam tennis matches in real time, built with Jetpack Compose, Material 3, and Clean Architecture.
+A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam tennis tournaments in real time, built with Jetpack Compose, Material 3, and Clean Architecture.
 
 ---
 
 ## 🌟 Features
 
+- **Global Tournament Coverage**: Real-time match scores, schedules, and results across all Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) and ATP / WTA Tour tournaments.
+- **Tournament Selector**: Interactive tournament filter row to switch between "All Tournaments" or scope to specific Grand Slams and Masters events.
 - **Live Tennis Scoreboard**: Real-time match scores, set scores, game status, serve indicators, and seed badges for ATP Men's and WTA Women's tournaments.
 - **Singles & Doubles Support**:
   - Full doubles representation with dual overlapping portraits, partner names, dual country flags, and seed indicators.

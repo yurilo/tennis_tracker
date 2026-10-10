@@ -25,7 +25,7 @@
                 android:id="@+id/txt_widget_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="US OPEN • WATCHLIST"
+                android:text="TENNIS • WATCHLIST"
                 android:textColor="#F59E0B"
                 android:textSize="12sp"
                 android:textStyle="bold" />

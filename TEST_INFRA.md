@@ -1,28 +1,44 @@
-# E2E Test Infra: US Open Tennis Tracker
+# E2E Test Infra: Tennis Tracker Multi-Tournament Support
 
 ## Test Philosophy
-- Requirement-driven, opaque-box testing derived from ORIGINAL_REQUEST.md.
-- Verification covers all acceptance criteria: clean build compilation, unit test passes, accurate data parsing, deep linking intent generation and fallback, and Jetpack Compose UI state integrity.
+- Opaque-box, requirement-driven derived from `ORIGINAL_REQUEST.md`.
+- Verifies outward API behavior, domain abstractions, date dynamics, UI filter contracts, and collection performance without depending on implementation internals.
+- Methodology: 4-Tier test suite (Category-Partition, Boundary Value Analysis, Pairwise Combinatorial, Real-World Workloads) followed by Tier 5 Adversarial Coverage Hardening.
 
-## Feature Inventory & Test Mapping
-| # | Feature | Source (Requirement) | Tier 1 (Coverage) | Tier 2 (Boundary/Error) | Tier 3 (Cross-Feature) | Tier 4 (Workload Scenario) |
-|---|---------|---------------------|:-----------------:|:-----------------------:|:----------------------:|:--------------------------:|
-| F1 | Gradle Build & APK Output | ORIGINAL_REQUEST §R4 | 5 | 5 | ✓ | ✓ |
-| F2 | Domain Models & Score State | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
-| F3 | ESPN Scoreboard JSON Parsing | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
-| F4 | Offline Fallback & Error Handling | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ |
-| F5 | ESPN Deep Link URI Construction | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
-| F6 | Intent Launching & Browser Fallback | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ |
-| F7 | Compose Scoreboard UI & Filters | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ |
+## Feature Inventory
+| # | Feature | Source | Tier 1 | Tier 2 | Tier 3 |
+|---|---|---|:---:|:---:|:---:|
+| 1 | Dynamic Dates & Year Resolution | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ |
+| 2 | Dynamic Mock Relative Timestamps | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ |
+| 3 | Date Parser Robustness & Harmonization | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ |
+| 4 | ATP & WTA Tour Types (ATP, WTA, COMBINED) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 5 | Tournament Categories (Grand Slam, 1000, 500, 250, Finals) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 6 | Court Surfaces (Hard, Clay, Grass, Carpet) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 7 | Dynamic Tournament Matching & Discovery from Feeds | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 8 | Tiered UI Filter Chips (All, Grand Slams, ATP, WTA, 1000s, 500s/250s) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 9 | Contextual Active Tournament Chips | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ |
+| 10 | Loop Refactoring & O(N+M) Deduplication | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ |
+| 11 | Stream Matcher & Highlight Pre-Indexing Performance | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ |
+| 12 | Safe Parsing, Immutability & Concurrency Safety | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ |
 
 ## Test Architecture
-- Test Runner: `./gradlew testDebugUnitTest` and `./gradlew assembleDebug`
-- Unit Test Framework: JUnit 4 / Kotlin Test / Coroutines Test (`kotlinx-coroutines-test`) / Robolectric or standard JVM unit tests for parsers, repositories, deep-linking, viewmodels.
-- Pass/Fail Semantics: 0 build errors, 0 test failures, exit code 0.
+- **E2E Test Runner**: Dedicated executable JVM runner or Kotlin test runner executing comprehensive opaque-box test scenarios.
+- **Pass/Fail Semantics**: All test cases must assert expected contracts and exit with code 0 on 100% pass.
+- **Location**: `app/src/test/java/com/usopen/tracker/e2e/` and standalone test harness.
 
-## Acceptance Test Scenarios (Tier 4)
-1. **Live Match Scenario**: Live match with ongoing tiebreak (e.g. Alcaraz vs Sinner set 5, 6-6 (7-5)), verifying live status badge, set score display, game score display, and "Watch on ESPN" URI generation.
-2. **Upcoming Match Scenario**: Scheduled match with start time, tournament round (e.g. "Men's Singles - Semifinals"), player seedings (#1 vs #4), verifying disabled score fields and future broadcast deep-link.
-3. **Completed Match Scenario**: Final match result with winner highlighted, full match set breakdown (e.g. 6-4, 3-6, 7-6, 6-2), verifying replay stream deep-link generation.
-4. **Offline Resilience Scenario**: Network disconnected or endpoint returning HTTP 500 / malformed JSON, verifying UI displays fallback tournament fixture without crashing and displays offline indicator.
-5. **Deep Link Fallback Scenario**: Device without ESPN installed, verifying intent dispatcher detects inability to resolve custom app scheme and routes user to universal ESPN watch web URL (`https://www.espn.com/watch/...`).
+## Real-World Application Scenarios (Tier 4)
+| # | Scenario | Features Exercised | Complexity |
+|---|---|---|---|
+| 1 | Full Tournament Transition: Indian Wells Masters 1000 to Miami Open | F1, F4, F5, F7, F8, F9, F10 | High |
+| 2 | Combined Tournament Ingest: China Open with Men's ATP 500 & Women's WTA 1000 | F4, F5, F6, F7, F8, F9 | High |
+| 3 | Calendar Year Boundary Rollover: United Cup (Late Dec) to Australian Open (Early Jan) | F1, F2, F3, F5, F7 | High |
+| 4 | Multi-Tournament Live Feed with 1000 Streams & Highlights | F7, F10, F11, F12 | High |
+| 5 | Offline / Cache Startup with Dynamic Fallback Timestamps and Tier Filtering | F1, F2, F8, F9, F12 | Medium |
+| 6 | Year-End Finals (ATP Finals in Turin & WTA Finals in Riyadh) Discovery & UI Filtering | F4, F5, F6, F7, F8, F9 | High |
+
+## Coverage Thresholds
+- Tier 1: ≥60 test cases (≥5 per feature across 12 features)
+- Tier 2: ≥60 test cases (boundary values, invalid inputs, edge cases)
+- Tier 3: ≥12 test cases (pairwise interactions across tour, category, surface, filter, year)
+- Tier 4: ≥6 realistic application-level scenarios
+- Total Target: ≥138 opaque-box test cases in `TEST_READY.md`.

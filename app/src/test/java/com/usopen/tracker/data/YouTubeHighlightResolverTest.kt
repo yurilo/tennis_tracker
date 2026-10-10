@@ -55,6 +55,21 @@ class YouTubeHighlightResolverTest {
     }
 
     @Test
+    fun `buildSearchQuery targets official tournament channels for all Grand Slams`() {
+        val wimbledonMatch = sampleFinishedMatch.copy(tournamentName = "Wimbledon")
+        val wimbledonQuery = YouTubeHighlightResolver.buildSearchQuery(wimbledonMatch)
+        assertTrue(wimbledonQuery.contains("@wimbledon"))
+
+        val rolandGarrosMatch = sampleFinishedMatch.copy(tournamentName = "Roland Garros")
+        val rolandGarrosQuery = YouTubeHighlightResolver.buildSearchQuery(rolandGarrosMatch)
+        assertTrue(rolandGarrosQuery.contains("@rolandgarros"))
+
+        val ausOpenMatch = sampleFinishedMatch.copy(tournamentName = "Australian Open")
+        val ausOpenQuery = YouTubeHighlightResolver.buildSearchQuery(ausOpenMatch)
+        assertTrue(ausOpenQuery.contains("@australianopen"))
+    }
+
+    @Test
     fun `buildVideoDeepLink creates proper vnd youtube app Uri and web fallback`() {
         val deepLink = YouTubeHighlightResolver.buildVideoDeepLink("lytcJs4KWSk")
         assertEquals("vnd.youtube:lytcJs4KWSk", deepLink.appUri)

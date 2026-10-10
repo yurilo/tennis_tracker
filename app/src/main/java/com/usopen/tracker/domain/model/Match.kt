@@ -8,14 +8,14 @@ enum class MatchState {
 
 data class Match(
     val id: String,
-    val tournamentName: String = "US Open",
+    val tournamentName: String = "Tennis",
     val eventGrouping: String = "Men's Singles", // e.g. Men's Singles, Women's Singles
     val roundName: String = "",
     val state: MatchState,
     val statusDetail: String, // e.g. "Final", "In Progress - Set 3", "Scheduled 7:00 PM EDT"
     val player1: Competitor,
     val player2: Competitor,
-    val venue: String = "Arthur Ashe Stadium",
+    val venue: String = "Center Court",
     val court: String? = null,
     val startTime: String? = null,
     val endTime: String? = null,
@@ -24,8 +24,120 @@ data class Match(
     val espnWatchId: String? = null,
     val deepLink: DeepLink? = null,
     val youtubeVideoId: String? = null,
-    val youtubeDeepLink: DeepLink? = null
+    val youtubeDeepLink: DeepLink? = null,
+    val tournament: Tournament? = null,
+    val tour: TourType? = null,
+    val category: TournamentCategory? = null,
+    val surface: CourtSurface? = null
 ) {
+    /**
+     * Secondary constructor preserving 100% binary backward compatibility with pre-compiled modules.
+     */
+    constructor(
+        id: String,
+        tournamentName: String = "Tennis",
+        eventGrouping: String = "Men's Singles",
+        roundName: String = "",
+        state: MatchState,
+        statusDetail: String,
+        player1: Competitor,
+        player2: Competitor,
+        venue: String = "Center Court",
+        court: String? = null,
+        startTime: String? = null,
+        endTime: String? = null,
+        durationMinutes: Int? = null,
+        espnEventId: String? = null,
+        espnWatchId: String? = null,
+        deepLink: DeepLink? = null,
+        youtubeVideoId: String? = null,
+        youtubeDeepLink: DeepLink? = null
+    ) : this(
+        id = id,
+        tournamentName = tournamentName,
+        eventGrouping = eventGrouping,
+        roundName = roundName,
+        state = state,
+        statusDetail = statusDetail,
+        player1 = player1,
+        player2 = player2,
+        venue = venue,
+        court = court,
+        startTime = startTime,
+        endTime = endTime,
+        durationMinutes = durationMinutes,
+        espnEventId = espnEventId,
+        espnWatchId = espnWatchId,
+        deepLink = deepLink,
+        youtubeVideoId = youtubeVideoId,
+        youtubeDeepLink = youtubeDeepLink,
+        tournament = null,
+        tour = null,
+        category = null,
+        surface = null
+    )
+
+    /**
+     * Copy overload providing 100% binary backward compatibility with pre-compiled bytecode calling copy with 18 parameters.
+     */
+    fun copy(
+        id: String = this.id,
+        tournamentName: String = this.tournamentName,
+        eventGrouping: String = this.eventGrouping,
+        roundName: String = this.roundName,
+        state: MatchState = this.state,
+        statusDetail: String = this.statusDetail,
+        player1: Competitor = this.player1,
+        player2: Competitor = this.player2,
+        venue: String = this.venue,
+        court: String? = this.court,
+        startTime: String? = this.startTime,
+        endTime: String? = this.endTime,
+        durationMinutes: Int? = this.durationMinutes,
+        espnEventId: String? = this.espnEventId,
+        espnWatchId: String? = this.espnWatchId,
+        deepLink: DeepLink? = this.deepLink,
+        youtubeVideoId: String? = this.youtubeVideoId,
+        youtubeDeepLink: DeepLink? = this.youtubeDeepLink
+    ): Match = Match(
+        id = id,
+        tournamentName = tournamentName,
+        eventGrouping = eventGrouping,
+        roundName = roundName,
+        state = state,
+        statusDetail = statusDetail,
+        player1 = player1,
+        player2 = player2,
+        venue = venue,
+        court = court,
+        startTime = startTime,
+        endTime = endTime,
+        durationMinutes = durationMinutes,
+        espnEventId = espnEventId,
+        espnWatchId = espnWatchId,
+        deepLink = deepLink,
+        youtubeVideoId = youtubeVideoId,
+        youtubeDeepLink = youtubeDeepLink,
+        tournament = this.tournament,
+        tour = this.tour,
+        category = this.category,
+        surface = this.surface
+    )
+
+    val effectiveTour: TourType
+
+        get() = tour ?: tournament?.tour ?: when {
+            eventGrouping.contains("women", ignoreCase = true) -> TourType.WTA
+            eventGrouping.contains("men", ignoreCase = true) -> TourType.ATP
+            else -> TourType.COMBINED
+        }
+
+    val effectiveCategory: TournamentCategory
+        get() = category ?: tournament?.category ?: TournamentCategory.ATP_250
+
+    val effectiveSurface: CourtSurface
+        get() = surface ?: tournament?.surface ?: CourtSurface.HARD
+
     val displayCourt: String?
         get() = court?.takeIf { it.isNotBlank() }
             ?: venue.takeIf { it.isNotBlank() && !it.equals("New York, USA", ignoreCase = true) && !it.equals("TBD", ignoreCase = true) }

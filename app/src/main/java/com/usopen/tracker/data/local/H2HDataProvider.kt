@@ -5,6 +5,8 @@ import com.usopen.tracker.domain.model.H2HSummary
 import com.usopen.tracker.domain.model.HistoricalMatch
 import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
+import java.time.LocalDate
+import java.time.Year
 
 object H2HDataProvider {
 
@@ -34,19 +36,21 @@ object H2HDataProvider {
                 }
             }.ifEmpty { "Final" }
 
+            val currentYear = Year.now().value
+            val currentDate = LocalDate.now().toString()
             val currentMatch = HistoricalMatch(
                 id = "current_${match.id}",
-                date = "2026-09-05",
-                year = 2026,
-                tournamentName = if (match.tournamentName.isNotBlank() && match.tournamentName.contains("2026")) {
+                date = currentDate,
+                year = currentYear,
+                tournamentName = if (match.tournamentName.isNotBlank() && match.tournamentName.contains(currentYear.toString())) {
                     match.tournamentName
                 } else if (match.tournamentName.isNotBlank()) {
-                    "${match.tournamentName} 2026"
+                    "${match.tournamentName} $currentYear"
                 } else {
-                    "US Open 2026"
+                    "Tennis Tournament $currentYear"
                 },
-                venue = match.venue.ifEmpty { "Arthur Ashe Stadium" },
-                city = "New York",
+                venue = match.venue.ifEmpty { "Center Court" },
+                city = if (match.tournamentName.contains("US Open", ignoreCase = true)) "New York" else if (match.tournamentName.contains("Wimbledon", ignoreCase = true)) "London" else if (match.tournamentName.contains("Roland Garros", ignoreCase = true)) "Paris" else if (match.tournamentName.contains("Australian Open", ignoreCase = true)) "Melbourne" else "International",
                 round = match.roundName.ifEmpty { "Final" },
                 surface = CourtSurface.HARD,
                 player1Name = p1Name,
@@ -583,13 +587,14 @@ object H2HDataProvider {
             var p1Remaining = p1WinsOverride
             var p2Remaining = p2WinsOverride
 
+            val currentYear = Year.now().value
             val templates = listOf(
-                Triple("2024-08-14", "Cincinnati Masters", CourtSurface.HARD),
-                Triple("2024-05-12", "Italian Open", CourtSurface.CLAY),
-                Triple("2023-09-02", "US Open", CourtSurface.HARD),
-                Triple("2023-07-06", "Wimbledon", CourtSurface.GRASS),
-                Triple("2023-03-22", "Miami Open", CourtSurface.HARD),
-                Triple("2022-10-18", "European Open", CourtSurface.HARD)
+                Triple("${currentYear - 1}-08-14", "Cincinnati Masters", CourtSurface.HARD),
+                Triple("${currentYear - 1}-05-12", "Italian Open", CourtSurface.CLAY),
+                Triple("${currentYear - 2}-09-02", "US Open", CourtSurface.HARD),
+                Triple("${currentYear - 2}-07-06", "Wimbledon", CourtSurface.GRASS),
+                Triple("${currentYear - 2}-03-22", "Miami Open", CourtSurface.HARD),
+                Triple("${currentYear - 3}-10-18", "European Open", CourtSurface.HARD)
             )
 
             for (i in 0 until minOf(total, templates.size)) {
@@ -619,7 +624,7 @@ object H2HDataProvider {
                     HistoricalMatch(
                         id = "gen_${p1.hashCode()}_${p2.hashCode()}_$i",
                         date = date,
-                        year = date.substring(0, 4).toIntOrNull() ?: 2024,
+                        year = date.substring(0, 4).toIntOrNull() ?: (currentYear - 1),
                         tournamentName = tournament,
                         venue = if (surface == CourtSurface.HARD) "Center Court" else "Court 1",
                         city = if (tournament.contains("US Open")) "New York" else "International",
@@ -637,11 +642,12 @@ object H2HDataProvider {
         }
 
         // Default deterministic 3-match rivalry when offline or no API match
+        val currentYear = Year.now().value
         return listOf(
             HistoricalMatch(
                 id = "gen_1",
-                date = "2024-08-14",
-                year = 2024,
+                date = "${currentYear - 1}-08-14",
+                year = currentYear - 1,
                 tournamentName = "Cincinnati Masters",
                 venue = "Center Court, Lindner Family Tennis Center",
                 city = "Cincinnati",
@@ -655,8 +661,8 @@ object H2HDataProvider {
             ),
             HistoricalMatch(
                 id = "gen_2",
-                date = "2024-05-12",
-                year = 2024,
+                date = "${currentYear - 1}-05-12",
+                year = currentYear - 1,
                 tournamentName = "Italian Open",
                 venue = "Campo Centrale, Foro Italico",
                 city = "Rome",
@@ -670,8 +676,8 @@ object H2HDataProvider {
             ),
             HistoricalMatch(
                 id = "gen_3",
-                date = "2023-09-02",
-                year = 2023,
+                date = "${currentYear - 2}-09-02",
+                year = currentYear - 2,
                 tournamentName = "US Open",
                 venue = "Louis Armstrong Stadium",
                 city = "New York",

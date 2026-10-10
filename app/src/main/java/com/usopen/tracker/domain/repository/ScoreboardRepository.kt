@@ -11,7 +11,7 @@ interface ScoreboardRepository {
     fun getOfflineScoreboard(): List<Match>
     fun getOfflineScoreboardForTournament(tournament: Tournament): List<Match> = getOfflineScoreboard()
     suspend fun getMatchStatistics(match: Match): Result<MatchStatistics>
-    fun getActiveTournament(): Tournament = Tournaments.US_OPEN
+    fun getActiveTournament(): Tournament = Tournaments.ALL
     fun setActiveTournament(tournament: Tournament) {}
     suspend fun resolveWatchStreamForMatch(match: Match): Match = match
     suspend fun resolveHighlightsForMatch(match: Match): Match = match

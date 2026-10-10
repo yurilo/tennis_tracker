@@ -1,6 +1,7 @@
 package com.usopen.tracker.data.remote
 
 import com.usopen.tracker.domain.model.Match
+import com.usopen.tracker.util.TimezoneFormatter
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -102,11 +103,13 @@ open class EspnWatchApi(
         if (!rawTime.isNullOrEmpty()) {
             val dateCandidates = mutableListOf<String>()
             try {
-                val instant = java.time.Instant.parse(rawTime)
-                val nyDate = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
-                    .withZone(java.time.ZoneId.of("America/New_York"))
-                    .format(instant)
-                dateCandidates.add(nyDate)
+                val instant = TimezoneFormatter.parseToInstant(rawTime)
+                if (instant != null) {
+                    val nyDate = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
+                        .withZone(TimezoneFormatter.NEW_YORK_ZONE)
+                        .format(instant)
+                    dateCandidates.add(nyDate)
+                }
             } catch (_: Throwable) {}
 
             val utcDate = rawTime.take(10).replace("-", "")
@@ -320,18 +323,20 @@ open class EspnWatchApi(
                         subtitle.contains("Basketball", ignoreCase = true) ||
                         subtitle.contains("MLB", ignoreCase = true)
 
-                val isTennisOrUsOpen = !isOtherSport && (
-                        subtitle.contains("US Open", ignoreCase = true) ||
+                val isTennisStream = !isOtherSport && (
                         subtitle.contains("Tennis", ignoreCase = true) ||
-                        name.contains("US Open", ignoreCase = true) ||
+                        subtitle.contains("US Open", ignoreCase = true) ||
+                        subtitle.contains("Wimbledon", ignoreCase = true) ||
+                        subtitle.contains("Roland Garros", ignoreCase = true) ||
+                        subtitle.contains("Australian Open", ignoreCase = true) ||
+                        name.contains("Tennis", ignoreCase = true) ||
                         name.contains("Court", ignoreCase = true) ||
                         name.contains("Stadium", ignoreCase = true) ||
-                        name.contains("Grandstand", ignoreCase = true) ||
-                        bucketName.contains("US Open", ignoreCase = true) ||
-                        bucketName.contains("Tennis", ignoreCase = true)
+                        bucketName.contains("Tennis", ignoreCase = true) ||
+                        bucketName.contains("Open", ignoreCase = true)
                 )
 
-                if (!isTennisOrUsOpen) continue
+                if (!isTennisStream) continue
 
                 var appPlayUrl: String? = null
                 var webUrl: String? = null

@@ -25,6 +25,7 @@ open class TennisStatsApi(
         private const val US_OPEN_ATP_SEASON = "85956"
         private const val US_OPEN_WTA_TOURNAMENT = "196857"
         private const val US_OPEN_WTA_SEASON = "85958"
+        private val TOKEN_DELIMITER_REGEX = Regex("[\\s/.-]+")
     }
 
     open fun fetchStatistics(match: Match): Result<MatchStatistics> {
@@ -251,30 +252,72 @@ open class TennisStatsApi(
             val events = root.optJSONArray("events") ?: return emptyMap()
 
             val scoreMap = mutableMapOf<String, Pair<String, String>>()
+            if (liveMatches.isEmpty()) return emptyMap()
 
-            for (m in liveMatches) {
-                val p1Tokens = extractPlayerTokens(m.player1.name)
-                val p2Tokens = extractPlayerTokens(m.player2.name)
+            data class MatchTokens(
+                val match: Match,
+                val p1Tokens: List<String>,
+                val p2Tokens: List<String>
+            )
 
-                for (i in 0 until events.length()) {
-                    val ev = events.optJSONObject(i) ?: continue
-                    val homeTeam = ev.optJSONObject("homeTeam")?.optString("name", "")?.lowercase() ?: ""
-                    val awayTeam = ev.optJSONObject("awayTeam")?.optString("name", "")?.lowercase() ?: ""
+            val indexedMatches = liveMatches.map { m ->
+                MatchTokens(
+                    match = m,
+                    p1Tokens = extractPlayerTokens(m.player1.name),
+                    p2Tokens = extractPlayerTokens(m.player2.name)
+                )
+            }
 
-                    val p1InHome = p1Tokens.any { it.isNotEmpty() && homeTeam.contains(it) }
-                    val p1InAway = p1Tokens.any { it.isNotEmpty() && awayTeam.contains(it) }
-                    val p2InHome = p2Tokens.any { it.isNotEmpty() && homeTeam.contains(it) }
-                    val p2InAway = p2Tokens.any { it.isNotEmpty() && awayTeam.contains(it) }
+            // Pre-index matches by their player tokens for O(1) candidate lookup
+            val tokenToMatches = mutableMapOf<String, MutableList<MatchTokens>>()
+            for (mt in indexedMatches) {
+                for (token in (mt.p1Tokens + mt.p2Tokens)) {
+                    if (token.isNotEmpty()) {
+                        tokenToMatches.getOrPut(token) { mutableListOf() }.add(mt)
+                    }
+                }
+            }
 
-                    val homePoint = ev.optJSONObject("homeScore")?.optString("point", "") ?: ""
-                    val awayPoint = ev.optJSONObject("awayScore")?.optString("point", "") ?: ""
+            for (i in 0 until events.length()) {
+                val ev = events.optJSONObject(i) ?: continue
+                val homePoint = ev.optJSONObject("homeScore")?.optString("point", "") ?: ""
+                val awayPoint = ev.optJSONObject("awayScore")?.optString("point", "") ?: ""
+                if (homePoint.isEmpty() && awayPoint.isEmpty()) continue
 
-                    if (p1InHome && p2InAway && (homePoint.isNotEmpty() || awayPoint.isNotEmpty())) {
-                        scoreMap[m.id] = normalizePoint(homePoint) to normalizePoint(awayPoint)
-                        break
-                    } else if (p2InHome && p1InAway && (homePoint.isNotEmpty() || awayPoint.isNotEmpty())) {
-                        scoreMap[m.id] = normalizePoint(awayPoint) to normalizePoint(homePoint)
-                        break
+                val homeTeam = ev.optJSONObject("homeTeam")?.optString("name", "")?.lowercase() ?: ""
+                val awayTeam = ev.optJSONObject("awayTeam")?.optString("name", "")?.lowercase() ?: ""
+
+                // Lookup candidate matches via indexed player tokens map
+                val eventTokens = (homeTeam.split(TOKEN_DELIMITER_REGEX) + awayTeam.split(TOKEN_DELIMITER_REGEX))
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotEmpty() }
+
+                val candidates = mutableSetOf<MatchTokens>()
+                for (token in eventTokens) {
+                    tokenToMatches[token]?.let { candidates.addAll(it) }
+                }
+
+                // Fallback for substring matching in concatenated names
+                if (candidates.isEmpty()) {
+                    for ((token, targetMatches) in tokenToMatches) {
+                        if (homeTeam.contains(token) || awayTeam.contains(token)) {
+                            candidates.addAll(targetMatches)
+                        }
+                    }
+                }
+
+                for (mt in candidates) {
+                    if (scoreMap.containsKey(mt.match.id)) continue
+
+                    val p1InHome = mt.p1Tokens.any { it.isNotEmpty() && homeTeam.contains(it) }
+                    val p1InAway = mt.p1Tokens.any { it.isNotEmpty() && awayTeam.contains(it) }
+                    val p2InHome = mt.p2Tokens.any { it.isNotEmpty() && homeTeam.contains(it) }
+                    val p2InAway = mt.p2Tokens.any { it.isNotEmpty() && awayTeam.contains(it) }
+
+                    if (p1InHome && p2InAway) {
+                        scoreMap[mt.match.id] = normalizePoint(homePoint) to normalizePoint(awayPoint)
+                    } else if (p2InHome && p1InAway) {
+                        scoreMap[mt.match.id] = normalizePoint(awayPoint) to normalizePoint(homePoint)
                     }
                 }
             }

@@ -1,20 +1,6 @@
 package com.usopen.tracker.domain.model
 
-import androidx.compose.ui.graphics.Color
 
-enum class CourtSurface(
-    val displayName: String,
-    val icon: String,
-    val colorHex: Long
-) {
-    HARD("Hard Court", "🟦", 0xFF0284C7),
-    CLAY("Clay Court", "🟧", 0xFFEA580C),
-    GRASS("Grass Court", "🟩", 0xFF16A34A),
-    CARPET("Carpet/Indoor", "🟪", 0xFF6366F1);
-
-    val color: Color
-        get() = Color(colorHex)
-}
 
 data class HistoricalMatch(
     val id: String,

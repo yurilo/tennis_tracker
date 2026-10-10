@@ -18,7 +18,7 @@
         android:strokeWidth="2.5"
         android:strokeLineCap="round"
         android:pathData="M74,34 C64,44 64,64 74,74" />
-    <!-- US Open flaming emblem accent -->
+    <!-- Tennis star emblem accent -->
     <path
         android:fillColor="#FFB800"
         android:pathData="M54,20 L58,28 L67,29 L60,35 L62,44 L54,39 L46,44 L48,35 L41,29 L50,28 Z" />
