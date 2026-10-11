@@ -1,10 +1,13 @@
 package com.usopen.tracker
 
 import android.app.Application
-
 import com.usopen.tracker.data.repository.ScoreboardRepositoryImpl
+import com.usopen.tracker.data.telemetry.AnonymousTelemetryService
 import com.usopen.tracker.ui.widget.FollowedMatchesWidgetProvider
 import com.usopen.tracker.ui.widget.WidgetAutoSyncManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class UsOpenApp : Application() {
     override fun onCreate() {

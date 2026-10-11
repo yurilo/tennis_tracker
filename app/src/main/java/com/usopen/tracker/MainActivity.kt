@@ -5,11 +5,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import com.usopen.tracker.data.telemetry.AnonymousTelemetryService
 import com.usopen.tracker.ui.screen.ScoreboardScreen
 import com.usopen.tracker.ui.theme.UsOpenTrackerTheme
 import com.usopen.tracker.ui.viewmodel.MatchFilter
 import com.usopen.tracker.ui.viewmodel.ScoreboardViewModel
 import com.usopen.tracker.ui.widget.FollowedMatchesWidgetProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -41,6 +45,16 @@ class MainActivity : ComponentActivity() {
             addAction(Intent.ACTION_DATE_CHANGED)
         }
         registerReceiver(timeChangeReceiver, filter)
+
+        // Asynchronously dispatch anonymous heartbeat when user enters app (throttled to 30m)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                AnonymousTelemetryService.getInstance(this@MainActivity)
+                    .sendStartupHeartbeat(force = false)
+            } catch (_: Throwable) {
+                // Ignore any telemetry dispatch failure
+            }
+        }
     }
 
     override fun onStop() {
