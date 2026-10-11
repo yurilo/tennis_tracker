@@ -4,7 +4,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.16)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.16/TennisTracker-v1.0.16.apk)**
+📥 **[Download Latest APK (v1.0.17)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.17/TennisTracker-v1.0.17.apk)**
 
 ---
 
@@ -26,6 +26,10 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
   - Quick YouTube highlights search integration.
 - **Home Screen App Widget**:
   - Interactive Glance / RemoteViews widget with automatic 1-minute live match refresh.
+- **Anonymous Heartbeat Telemetry & Live Dashboard**:
+  - Zero-PII active user installation heartbeat to track daily/monthly active users.
+  - Transparent user opt-out toggle in About dialog, GDPR erasure, and auto-backup isolation.
+  - Free serverless Cloudflare Workers live telemetry dashboard (`telemetry_dashboard/`).
 - **Offline Resilience**:
   - Dual-source repository with bundled realistic offline fixtures when network is unreachable.
 
