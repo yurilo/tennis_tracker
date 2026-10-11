@@ -23,15 +23,5 @@ class UsOpenApp : Application() {
                 FollowedMatchesWidgetProvider.triggerBackgroundSync(this)
             }
         }
-
-        // Asynchronously dispatch anonymous startup heartbeat to live telemetry dashboard
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                AnonymousTelemetryService.getInstance(this@UsOpenApp)
-                    .sendStartupHeartbeat(force = false)
-            } catch (_: Throwable) {
-                // Ignore any telemetry dispatch failure
-            }
-        }
     }
 }

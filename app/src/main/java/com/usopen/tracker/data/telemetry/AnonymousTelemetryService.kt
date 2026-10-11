@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.usopen.tracker.domain.telemetry.TelemetryEvent
 import com.usopen.tracker.domain.telemetry.TelemetryService
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ class AnonymousTelemetryService(
         const val HEARTBEAT_THROTTLE_MS = 30 * 60 * 1000L // 30 minutes
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        private val lock = Any()
 
         // Transient session ID regenerated on every cold start
         val processSessionId: String by lazy { UUID.randomUUID().toString() }
@@ -64,6 +66,13 @@ class AnonymousTelemetryService(
                 instance ?: AnonymousTelemetryService(context.applicationContext).also { instance = it }
             }
         }
+
+        @VisibleForTesting
+        fun resetInstanceForTesting() {
+            synchronized(this) {
+                instance = null
+            }
+        }
     }
 
     private val prefs: SharedPreferences by lazy {
@@ -75,17 +84,27 @@ class AnonymousTelemetryService(
     }
 
     override fun setTelemetryEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_TELEMETRY_ENABLED, enabled).apply()
+        synchronized(lock) {
+            val editor = prefs.edit().putBoolean(KEY_TELEMETRY_ENABLED, enabled)
+            if (!enabled) {
+                // Privacy compliance (GDPR Right to Erasure): Purge stored anonymous UUID upon opt-out
+                editor.remove(KEY_ANONYMOUS_ID)
+                editor.remove(KEY_LAST_HEARTBEAT_TIME)
+            }
+            editor.apply()
+        }
         Log.i(TAG, "Anonymous telemetry enabled=$enabled")
     }
 
     override fun getAnonymousId(): String {
-        var id = prefs.getString(KEY_ANONYMOUS_ID, null)
-        if (id.isNullOrBlank()) {
-            id = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_ANONYMOUS_ID, id).apply()
+        synchronized(lock) {
+            var id = prefs.getString(KEY_ANONYMOUS_ID, null)
+            if (id.isNullOrBlank()) {
+                id = UUID.randomUUID().toString()
+                prefs.edit().putString(KEY_ANONYMOUS_ID, id).apply()
+            }
+            return id
         }
-        return id
     }
 
     override fun getEndpointUrl(): String {
@@ -95,6 +114,9 @@ class AnonymousTelemetryService(
     override fun setEndpointUrl(url: String) {
         val cleanUrl = url.trim()
         if (cleanUrl.isNotEmpty()) {
+            require(cleanUrl.startsWith("https://", ignoreCase = true)) {
+                "Only secure HTTPS endpoints are permitted"
+            }
             prefs.edit().putString(KEY_ENDPOINT_URL, cleanUrl).apply()
         } else {
             prefs.edit().remove(KEY_ENDPOINT_URL).apply()
@@ -116,12 +138,12 @@ class AnonymousTelemetryService(
             null
         }
 
-        val versionName = packageInfo?.versionName ?: "1.0.16"
+        val versionName = packageInfo?.versionName ?: "1.0.17"
         val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo?.longVersionCode?.toInt() ?: 17
+            packageInfo?.longVersionCode?.toInt() ?: 18
         } else {
             @Suppress("DEPRECATION")
-            packageInfo?.versionCode ?: 17
+            packageInfo?.versionCode ?: 18
         }
 
         return TelemetryEvent(
@@ -148,10 +170,16 @@ class AnonymousTelemetryService(
         }
 
         val now = System.currentTimeMillis()
-        val lastHeartbeat = prefs.getLong(KEY_LAST_HEARTBEAT_TIME, 0L)
-        if (!force && (now - lastHeartbeat < HEARTBEAT_THROTTLE_MS)) {
-            Log.d(TAG, "Telemetry throttled (last sent ${(now - lastHeartbeat) / 1000}s ago)")
-            return false
+        synchronized(lock) {
+            val lastHeartbeat = prefs.getLong(KEY_LAST_HEARTBEAT_TIME, 0L)
+            val elapsed = now - lastHeartbeat
+            // Handle clock skew (negative elapsed) and enforce throttle window
+            if (!force && elapsed in 0 until HEARTBEAT_THROTTLE_MS) {
+                Log.d(TAG, "Telemetry throttled (last sent ${elapsed / 1000}s ago)")
+                return false
+            }
+            // Optimistically update throttle timestamp to prevent TOCTOU race storms
+            prefs.edit().putLong(KEY_LAST_HEARTBEAT_TIME, now).apply()
         }
 
         val event = createStartupEvent()
@@ -169,17 +197,23 @@ class AnonymousTelemetryService(
 
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        prefs.edit().putLong(KEY_LAST_HEARTBEAT_TIME, now).apply()
                         Log.i(TAG, "Anonymous heartbeat transmitted successfully (HTTP ${response.code})")
                         true
                     } else {
                         Log.w(TAG, "Telemetry endpoint returned HTTP ${response.code}")
+                        // Rollback throttle timestamp to allow retry earlier (e.g. 5 minutes from now)
+                        synchronized(lock) {
+                            prefs.edit().putLong(KEY_LAST_HEARTBEAT_TIME, now - (HEARTBEAT_THROTTLE_MS - 5 * 60 * 1000L)).apply()
+                        }
                         false
                     }
                 }
             } catch (e: Exception) {
                 // Telemetry transmission is purely non-critical; never crash or disturb user
                 Log.d(TAG, "Telemetry transmission silently bypassed: ${e.message}")
+                synchronized(lock) {
+                    prefs.edit().putLong(KEY_LAST_HEARTBEAT_TIME, now - (HEARTBEAT_THROTTLE_MS - 5 * 60 * 1000L)).apply()
+                }
                 false
             }
         }

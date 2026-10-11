@@ -2,18 +2,26 @@
  * Tennis Tracker — Free Real-time Anonymous Telemetry & Live Dashboard Worker
  * Deployable on Cloudflare Workers (Free tier: 100k requests/day).
  *
- * Setup:
- * 1. Create a free Cloudflare account at https://workers.cloudflare.com
- * 2. Create a Worker, paste this code.
- * 3. Bind a KV namespace named `TELEMETRY_KV` in Worker Settings -> Variables -> KV Namespace Bindings.
- * 4. Visit your Worker URL (e.g. https://tennis-telemetry.yoursubdomain.workers.dev) to see your live dashboard!
+ * Security & Efficiency Hardened:
+ * - HTML entity escaping on all user-supplied metadata (Stored XSS mitigation)
+ * - Optimized KV writes (1 write per unique DAU, capped ring buffer)
+ * - Edge cached stats endpoint (Cache-Control: 60s) to preserve list quotas
  */
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Enable CORS for testing
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -24,54 +32,57 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // 1. Telemetry Ingestion Endpoint: POST /api/heartbeat
+    // 1. Ingestion Endpoint: POST /api/heartbeat
     if (request.method === "POST" && (url.pathname === "/api/heartbeat" || url.pathname === "/api/ping")) {
       try {
         const body = await request.json();
+        if (!body || typeof body !== "object") {
+          return new Response(JSON.stringify({ status: "error", message: "Invalid JSON payload" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
         const now = new Date();
         const dateKey = now.toISOString().split("T")[0]; // YYYY-MM-DD
-        const anonymousId = body.anonymousId || "anon-" + Math.random().toString(36).substring(2, 9);
-        const appVersion = body.appVersion || "1.0.16";
-        const osVersion = body.osVersion || "Android";
-        const deviceManufacturer = body.deviceManufacturer || "Unknown";
+        
+        // Strict input sanitization & length limits
+        const rawId = String(body.anonymousId || "").trim();
+        const anonymousId = /^[0-9a-fA-F-]{36}$/.test(rawId) ? rawId : "anon-" + Math.random().toString(36).substring(2, 9);
+        const appVersion = String(body.appVersion || "1.0.17").substring(0, 16);
+        const osVersion = String(body.osVersion || "Android").substring(0, 16);
+        const deviceManufacturer = String(body.deviceManufacturer || "Generic").substring(0, 32);
 
-        // Store in KV if available
         if (env.TELEMETRY_KV) {
-          // Increment total pings
+          // Track unique DAU with 48h TTL (Only 1 write per unique user per day)
+          const dauUserKey = `dau:${dateKey}:${anonymousId}`;
+          const existing = await env.TELEMETRY_KV.get(dauUserKey);
+          if (!existing) {
+            await env.TELEMETRY_KV.put(dauUserKey, "1", { expirationTtl: 86400 * 2 });
+            
+            // Increment daily active counter key
+            const dayCountKey = `count:${dateKey}`;
+            const currentDayCount = parseInt(await env.TELEMETRY_KV.get(dayCountKey) || "0", 10);
+            await env.TELEMETRY_KV.put(dayCountKey, (currentDayCount + 1).toString(), { expirationTtl: 86400 * 30 });
+          }
+
+          // Total pings counter
           const totalKey = "stats:total_pings";
           const currentTotal = parseInt(await env.TELEMETRY_KV.get(totalKey) || "0", 10);
           await env.TELEMETRY_KV.put(totalKey, (currentTotal + 1).toString());
 
-          // Mark unique user for today (DAU)
-          const dauUserKey = `dau:${dateKey}:${anonymousId}`;
-          await env.TELEMETRY_KV.put(dauUserKey, "1", { expirationTtl: 86400 * 2 }); // 48h TTL
-
-          // Mark unique user for 30 days (MAU)
-          const mauUserKey = `mau:${anonymousId}`;
-          await env.TELEMETRY_KV.put(mauUserKey, dateKey, { expirationTtl: 86400 * 35 });
-
-          // Track version count
-          const verKey = `ver:${appVersion}`;
-          const currentVer = parseInt(await env.TELEMETRY_KV.get(verKey) || "0", 10);
-          await env.TELEMETRY_KV.put(verKey, (currentVer + 1).toString());
-
-          // Track OS count
-          const osKey = `os:${osVersion}`;
-          const currentOs = parseInt(await env.TELEMETRY_KV.get(osKey) || "0", 10);
-          await env.TELEMETRY_KV.put(osKey, (currentOs + 1).toString());
-
-          // Store in recent activity buffer (FIFO ring of last 25 events)
+          // Append to recent pings ring buffer (capped at 15 items, escaped)
           const recentKey = "stats:recent_pings";
           const recentList = JSON.parse(await env.TELEMETRY_KV.get(recentKey) || "[]");
           recentList.unshift({
             anonymousId: anonymousId.substring(0, 8) + "...",
-            appVersion,
-            osVersion,
-            deviceManufacturer,
+            appVersion: escapeHtml(appVersion),
+            osVersion: escapeHtml(osVersion),
+            deviceManufacturer: escapeHtml(deviceManufacturer),
             timestamp: now.toISOString(),
-            country: request.headers.get("cf-ipcountry") || "Unknown"
+            country: escapeHtml(request.headers.get("cf-ipcountry") || "US")
           });
-          await env.TELEMETRY_KV.put(recentKey, JSON.stringify(recentList.slice(0, 30)));
+          await env.TELEMETRY_KV.put(recentKey, JSON.stringify(recentList.slice(0, 15)));
         }
 
         return new Response(JSON.stringify({ status: "ok", received: true }), {
@@ -79,58 +90,50 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       } catch (err) {
-        return new Response(JSON.stringify({ status: "error", message: err.message }), {
+        return new Response(JSON.stringify({ status: "error", message: "Malformed request" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
     }
 
-    // 2. Stats API: GET /api/stats
+    // 2. Stats API: GET /api/stats (Edge cached for 60s to prevent KV list quota exhaustion)
     if (request.method === "GET" && url.pathname === "/api/stats") {
       let stats = {
         totalPings: 0,
         todayActiveUsers: 0,
-        monthlyActiveUsers: 0,
         recentEvents: []
       };
 
       if (env.TELEMETRY_KV) {
         stats.totalPings = parseInt(await env.TELEMETRY_KV.get("stats:total_pings") || "0", 10);
-        const now = new Date();
-        const dateKey = now.toISOString().split("T")[0];
-
-        // List keys for DAU
-        const dauList = await env.TELEMETRY_KV.list({ prefix: `dau:${dateKey}:` });
-        stats.todayActiveUsers = dauList.keys.length;
-
-        // List keys for MAU
-        const mauList = await env.TELEMETRY_KV.list({ prefix: "mau:" });
-        stats.monthlyActiveUsers = mauList.keys.length;
-
+        const dateKey = new Date().toISOString().split("T")[0];
+        
+        // Fast read of today's counter without expensive KV prefix listing
+        stats.todayActiveUsers = parseInt(await env.TELEMETRY_KV.get(`count:${dateKey}`) || "0", 10);
         stats.recentEvents = JSON.parse(await env.TELEMETRY_KV.get("stats:recent_pings") || "[]");
       }
 
       return new Response(JSON.stringify(stats, null, 2), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=60, s-maxage=60"
+        }
       });
     }
 
-    // 3. Live Dashboard UI: GET /
+    // 3. Live Dashboard UI: GET / (All user output HTML escaped)
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/dashboard")) {
       let totalPings = 0;
       let todayActive = 0;
-      let monthlyActive = 0;
       let recent = [];
 
       if (env.TELEMETRY_KV) {
         totalPings = parseInt(await env.TELEMETRY_KV.get("stats:total_pings") || "0", 10);
         const dateKey = new Date().toISOString().split("T")[0];
-        const dauList = await env.TELEMETRY_KV.list({ prefix: `dau:${dateKey}:` });
-        todayActive = dauList.keys.length;
-        const mauList = await env.TELEMETRY_KV.list({ prefix: "mau:" });
-        monthlyActive = mauList.keys.length;
+        todayActive = parseInt(await env.TELEMETRY_KV.get(`count:${dateKey}`) || "0", 10);
         recent = JSON.parse(await env.TELEMETRY_KV.get("stats:recent_pings") || "[]");
       }
 
@@ -183,7 +186,7 @@ export default {
         <p style="color: var(--muted); font-size: 0.85rem;">Live Real-Time Active Users & Telemetry</p>
       </div>
     </div>
-    <div class="badge"><div class="pulse"></div> Live Live Feeds Active</div>
+    <div class="badge"><div class="pulse"></div> Live Feeds Active</div>
   </div>
 
   <div class="grid">
@@ -193,26 +196,21 @@ export default {
       <div class="hint">Unique devices active today</div>
     </div>
     <div class="card">
-      <div class="label">Monthly Active Users (MAU)</div>
-      <div class="value" id="mau">${monthlyActive}</div>
-      <div class="hint">Unique devices past 30 days</div>
-    </div>
-    <div class="card">
       <div class="label">Total App Launches</div>
       <div class="value" id="total">${totalPings}</div>
       <div class="hint">Cumulative launch heartbeats</div>
     </div>
     <div class="card">
       <div class="label">Latest Release</div>
-      <div class="value" style="color: var(--accent);">v1.0.16</div>
-      <div class="hint">Build #17 • Google Play / GitHub</div>
+      <div class="value" style="color: var(--accent);">v1.0.17</div>
+      <div class="hint">Build #18 • Universal Tennis Tracker</div>
     </div>
   </div>
 
   <div class="table-container">
     <div class="table-header">
       <h2>Recent Live Heartbeats</h2>
-      <span style="color: var(--muted); font-size: 0.8rem;">Auto-updates every 10s</span>
+      <span style="color: var(--muted); font-size: 0.8rem;">Auto-updates every 15s</span>
     </div>
     <table>
       <thead>
@@ -229,12 +227,12 @@ export default {
         ${recent.length === 0 ? '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:2rem;">No heartbeat events recorded yet. Launch the app to see live events.</td></tr>' : 
           recent.map(e => `
             <tr>
-              <td class="mono">\${e.anonymousId}</td>
-              <td>\${e.appVersion}</td>
-              <td>Android \${e.osVersion}</td>
-              <td>\${e.deviceManufacturer}</td>
-              <td>\${e.country}</td>
-              <td class="time">\${new Date(e.timestamp).toLocaleTimeString()}</td>
+              <td class="mono">${escapeHtml(e.anonymousId)}</td>
+              <td>${escapeHtml(e.appVersion)}</td>
+              <td>Android ${escapeHtml(e.osVersion)}</td>
+              <td>${escapeHtml(e.deviceManufacturer)}</td>
+              <td>${escapeHtml(e.country)}</td>
+              <td class="time">${escapeHtml(new Date(e.timestamp).toLocaleTimeString())}</td>
             </tr>
           `).join('')
         }
@@ -243,32 +241,36 @@ export default {
   </div>
 
   <script>
-    // Live polling every 10s for real-time dashboard updates
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // Live polling every 15s for real-time dashboard updates
     setInterval(async () => {
       try {
         const res = await fetch('/api/stats');
         if (res.ok) {
           const data = await res.json();
-          document.getElementById('dau').innerText = data.todayActiveUsers;
-          document.getElementById('mau').innerText = data.monthlyActiveUsers;
-          document.getElementById('total').innerText = data.totalPings;
+          document.getElementById('dau').innerText = data.todayActiveUsers || 0;
+          document.getElementById('total').innerText = data.totalPings || 0;
 
           const tbody = document.getElementById('events-body');
           if (data.recentEvents && data.recentEvents.length > 0) {
             tbody.innerHTML = data.recentEvents.map(e => \`
               <tr>
-                <td class="mono">\${e.anonymousId}</td>
-                <td>\${e.appVersion}</td>
-                <td>Android \${e.osVersion}</td>
-                <td>\${e.deviceManufacturer}</td>
-                <td>\${e.country}</td>
-                <td class="time">\${new Date(e.timestamp).toLocaleTimeString()}</td>
+                <td class="mono">\${escapeHtml(e.anonymousId)}</td>
+                <td>\${escapeHtml(e.appVersion)}</td>
+                <td>Android \${escapeHtml(e.osVersion)}</td>
+                <td>\${escapeHtml(e.deviceManufacturer)}</td>
+                <td>\${escapeHtml(e.country)}</td>
+                <td class="time">\${escapeHtml(new Date(e.timestamp).toLocaleTimeString())}</td>
               </tr>
             \`).join('');
           }
         }
       } catch (err) {}
-    }, 10000);
+    }, 15000);
   </script>
 </body>
 </html>`;
