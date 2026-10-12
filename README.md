@@ -4,7 +4,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.17)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.17/TennisTracker-v1.0.17.apk)**
+📥 **[Download Latest APK (v1.0.18)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.18/TennisTracker-v1.0.18.apk)**
 
 ---
 
@@ -13,6 +13,13 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 - **Global Tournament Coverage**: Real-time match scores, schedules, and results across all Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) and ATP / WTA Tour tournaments.
 - **Tournament Selector**: Interactive tournament filter row to switch between "All Tournaments" or scope to specific Grand Slams and Masters events.
 - **Live Tennis Scoreboard**: Real-time match scores, set scores, game status, serve indicators, and seed badges for ATP Men's and WTA Women's tournaments.
+- **Centralized Settings & Material 3 Preferences**:
+  - Modal bottom sheet with immediate reactive persistence (no manual save required).
+  - Customizable scoreboard auto-refresh intervals: 30s, 60s (default), 2m, or Manual/Off.
+  - Followed match retention policies: 12h, 24h (default), 48h, 7d, or Never auto-clear.
+  - Adaptive home screen widget sync mode controls.
+  - Startup default tournament tier preferences (All, Grand Slams, ATP Tour, WTA Tour).
+  - One-tap "Reset to Defaults" confirmation action.
 - **Singles & Doubles Support**:
   - Full doubles representation with dual overlapping portraits, partner names, dual country flags, and seed indicators.
   - Interactive **Doubles Profile Picker Dialog** for choosing either partner.
@@ -28,7 +35,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
   - Interactive Glance / RemoteViews widget with automatic 1-minute live match refresh.
 - **Anonymous Heartbeat Telemetry & Live Dashboard**:
   - Zero-PII active user installation heartbeat to track daily/monthly active users.
-  - Transparent user opt-out toggle in About dialog, GDPR erasure, and auto-backup isolation.
+  - Transparent user opt-out toggle in Settings bottom sheet and About dialog, GDPR erasure, and auto-backup isolation.
   - Free serverless Cloudflare Workers live telemetry dashboard (`telemetry_dashboard/`).
 - **Offline Resilience**:
   - Dual-source repository with bundled realistic offline fixtures when network is unreachable.
