@@ -114,13 +114,13 @@ object PlayerImageCache {
         }
     }
 
-    suspend fun loadPlayerBitmap(competitor: Competitor): ImageBitmap? {
+    suspend fun loadPlayerBitmap(competitor: Competitor, tour: TennisTour? = null): ImageBitmap? {
         val directUrl = competitor.photoUrl?.takeIf { !it.contains("espncdn.com") }
             ?: PlayerPhotoProvider.getPhotoUrl(competitor)
         if (directUrl != null) {
             return loadImage(directUrl)
         }
-        val resolvedUrl = PlayerPhotoProvider.resolvePhotoUrl(competitor)
+        val resolvedUrl = PlayerPhotoProvider.resolvePhotoUrl(competitor.name, tour)
         if (!resolvedUrl.isNullOrBlank()) {
             return loadImage(resolvedUrl)
         }
@@ -183,7 +183,8 @@ fun PlayerAvatar(
             size = size,
             accentColor = accentColor,
             isDark = isDark,
-            modifier = clickModifier
+            modifier = clickModifier,
+            tour = tour
         )
 
         // Overlay Badges
@@ -280,7 +281,8 @@ private fun SingleAvatarCircle(
     size: Dp,
     accentColor: Color,
     isDark: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tour: TennisTour? = null
 ) {
     val photoUrl = competitor.photoUrl?.takeIf { !it.contains("espncdn.com") }
         ?: PlayerPhotoProvider.getPhotoUrl(competitor)
@@ -293,7 +295,7 @@ private fun SingleAvatarCircle(
             value = if (photoUrl != null) {
                 PlayerImageCache.loadImage(photoUrl)
             } else {
-                PlayerImageCache.loadPlayerBitmap(competitor)
+                PlayerImageCache.loadPlayerBitmap(competitor, tour)
             }
         }
     }
@@ -386,7 +388,8 @@ fun DoublesAvatar(
                 competitor = p1,
                 size = subSize,
                 accentColor = accentColor,
-                isDark = isDark
+                isDark = isDark,
+                tour = tour
             )
         }
 
@@ -400,7 +403,8 @@ fun DoublesAvatar(
                 competitor = p2,
                 size = subSize,
                 accentColor = accentColor,
-                isDark = isDark
+                isDark = isDark,
+                tour = tour
             )
         }
 
