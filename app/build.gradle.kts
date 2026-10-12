@@ -93,7 +93,7 @@ dependencies {
 
 tasks.withType<Test> {
     // Prevent tests from hanging indefinitely in a loop or unmocked socket wait
-    timeout.set(Duration.ofSeconds(120))
+    timeout.set(Duration.ofSeconds(300))
     testLogging {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

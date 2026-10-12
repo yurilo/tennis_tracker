@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -81,6 +82,7 @@ fun ScoreboardScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val settings by viewModel.settings.collectAsState()
     val selectedMatchForStats by viewModel.selectedMatchForStats.collectAsState()
     val statsState by viewModel.statsUiState.collectAsState()
     val selectedMatchForH2H by viewModel.selectedMatchForH2H.collectAsState()
@@ -88,6 +90,7 @@ fun ScoreboardScreen(
     val context = LocalContext.current
 
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
 
     val packageInfo = remember(context) {
         try {
@@ -192,20 +195,34 @@ fun ScoreboardScreen(
                             tint = UsOpenGold
                         )
                     }
+                    IconButton(
+                        onClick = { showSettingsSheet = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = Color.White
+                        )
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .clickable { showSettingsSheet = true }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
-                                .background(UsOpenGold, androidx.compose.foundation.shape.CircleShape)
+                                .background(
+                                    if (settings.autoRefreshInterval.isEnabled) UsOpenGold else Color.Gray,
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Auto 1m",
+                            text = settings.autoRefreshInterval.badgeLabel,
                             fontSize = 11.sp,
                             color = Color.White,
                             fontWeight = FontWeight.Medium
@@ -448,6 +465,21 @@ fun ScoreboardScreen(
         )
     }
 
+    // Modal Bottom Sheet for Centralized Settings & Preferences
+    if (showSettingsSheet) {
+        SettingsBottomSheet(
+            settings = settings,
+            onAutoRefreshIntervalChanged = { viewModel.updateAutoRefreshInterval(it) },
+            onFollowedRetentionChanged = { viewModel.updateMatchRetention(it) },
+            onWidgetSyncModeChanged = { viewModel.updateWidgetSyncMode(it) },
+            onDefaultTournamentTierChanged = { viewModel.updateDefaultTournament(it) },
+            onTelemetryToggled = { viewModel.updateTelemetryEnabled(it) },
+            onTelemetryEndpointChanged = { viewModel.updateTelemetryEndpoint(it) },
+            onResetToDefaults = { viewModel.resetSettingsToDefaults() },
+            onDismiss = { showSettingsSheet = false }
+        )
+    }
+
     if (showAboutDialog) {
         val isDark = isSystemInDarkTheme()
         AlertDialog(
@@ -516,17 +548,12 @@ fun ScoreboardScreen(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
 
-                    val telemetryService = remember(context) { AnonymousTelemetryService.getInstance(context) }
-                    var telemetryOptIn by remember { mutableStateOf(telemetryService.isTelemetryEnabled()) }
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                val next = !telemetryOptIn
-                                telemetryOptIn = next
-                                telemetryService.setTelemetryEnabled(next)
+                                viewModel.updateTelemetryEnabled(!settings.telemetryEnabled)
                             }
                             .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -549,10 +576,9 @@ fun ScoreboardScreen(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Switch(
-                            checked = telemetryOptIn,
+                            checked = settings.telemetryEnabled,
                             onCheckedChange = {
-                                telemetryOptIn = it
-                                telemetryService.setTelemetryEnabled(it)
+                                viewModel.updateTelemetryEnabled(it)
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = UsOpenNavy,

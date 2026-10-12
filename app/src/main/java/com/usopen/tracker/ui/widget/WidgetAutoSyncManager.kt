@@ -13,12 +13,16 @@ import com.usopen.tracker.data.local.FollowManager
 import com.usopen.tracker.data.repository.ScoreboardRepositoryImpl
 import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
+import com.usopen.tracker.domain.model.WidgetSyncMode
+import com.usopen.tracker.domain.repository.SettingsRepository
 import com.usopen.tracker.util.TimezoneFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -42,14 +46,60 @@ object WidgetAutoSyncManager {
 
     const val REQUEST_CODE_AUTO_SYNC = 42
 
+    @Volatile
+    var settingsRepository: SettingsRepository? = null
+    private var settingsJob: Job? = null
+
+    fun attachSettingsRepository(repository: SettingsRepository, context: Context? = null) {
+        this.settingsRepository = repository
+        if (context != null) {
+            val appContext = context.applicationContext
+            settingsJob?.cancel()
+            settingsJob = syncScope.launch {
+                repository.settings
+                    .map { it.widgetSyncMode }
+                    .distinctUntilChanged()
+                    .collect { mode ->
+                        applySyncMode(appContext, mode)
+                    }
+            }
+        }
+    }
+
+    fun getSyncMode(context: Context): WidgetSyncMode {
+        settingsRepository?.let { return it.getSettings().widgetSyncMode }
+        return try {
+            val repo = com.usopen.tracker.data.repository.SettingsRepositoryImpl.getInstance(context)
+            repo.getSettings().widgetSyncMode
+        } catch (_: Throwable) {
+            WidgetSyncMode.DEFAULT
+        }
+    }
+
+    fun applySyncMode(context: Context, mode: WidgetSyncMode) {
+        val appContext = context.applicationContext
+        if (mode == WidgetSyncMode.DISABLED) {
+            cancelSync(appContext)
+        } else {
+            scheduleNextSync(appContext, 0L)
+        }
+        try {
+            FollowedMatchesWidgetProvider.updateAllWidgets(appContext)
+        } catch (_: Throwable) {}
+    }
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     /**
      * Checks if auto-sync is currently enabled by user preference (defaults to true).
+     * Returns false if widget sync mode is DISABLED.
      */
     fun isAutoSyncEnabled(context: Context): Boolean {
+        if (getSyncMode(context) == WidgetSyncMode.DISABLED) {
+            return false
+        }
         return getPrefs(context).getBoolean(KEY_AUTO_SYNC_ENABLED, true)
     }
 
@@ -106,24 +156,15 @@ object WidgetAutoSyncManager {
     }
 
     /**
-     * Calculates the optimal adaptive interval based on match states.
+     * Calculates the background sync interval based on match states and [WidgetSyncMode].
      */
-    fun calculateInterval(matches: List<Match>, followedIds: Set<String>): Long {
-        val relevantMatches = if (followedIds.isNotEmpty()) {
-            matches.filter { it.id in followedIds }
-        } else {
-            matches
-        }
-
-        if (relevantMatches.isEmpty()) {
-            return INTERVAL_DEFAULT_MILLIS
-        }
-
-        return when {
-            relevantMatches.any { it.state == MatchState.LIVE } -> INTERVAL_LIVE_MILLIS
-            relevantMatches.any { it.state == MatchState.UPCOMING } -> INTERVAL_UPCOMING_MILLIS
-            else -> INTERVAL_DEFAULT_MILLIS
-        }
+    @JvmOverloads
+    fun calculateInterval(
+        matches: List<Match>,
+        followedIds: Set<String>,
+        mode: WidgetSyncMode = WidgetSyncMode.ADAPTIVE
+    ): Long {
+        return mode.resolveIntervalMillis(matches, followedIds) ?: INTERVAL_DEFAULT_MILLIS
     }
 
     @Volatile
@@ -137,18 +178,22 @@ object WidgetAutoSyncManager {
     fun startActiveTicker(context: Context) {
         val appContext = context.applicationContext
         activeTickerJob?.cancel()
-        if (!isAutoSyncEnabled(appContext) || !hasActiveWidgets(appContext)) return
+        val syncMode = getSyncMode(appContext)
+        if (syncMode == WidgetSyncMode.DISABLED || !isAutoSyncEnabled(appContext) || !hasActiveWidgets(appContext)) return
 
         activeTickerJob = syncScope.launch {
             while (isActive) {
+                val mode = getSyncMode(appContext)
+                if (mode == WidgetSyncMode.DISABLED || !isAutoSyncEnabled(appContext) || !hasActiveWidgets(appContext)) break
+
                 val repository = ScoreboardRepositoryImpl.getInstance(appContext)
                 val matches = repository.getOfflineScoreboard()
                 val followManager = FollowManager.getInstance(appContext)
                 val followedIds = followManager.getFollowedMatchIds()
-                val interval = calculateInterval(matches, followedIds)
+                val interval = calculateInterval(matches, followedIds, mode)
 
                 delay(interval)
-                if (!isActive || !isAutoSyncEnabled(appContext) || !hasActiveWidgets(appContext)) break
+                if (!isActive || getSyncMode(appContext) == WidgetSyncMode.DISABLED || !isAutoSyncEnabled(appContext) || !hasActiveWidgets(appContext)) break
 
                 FollowedMatchesWidgetProvider.triggerBackgroundSync(appContext)
             }
@@ -164,11 +209,14 @@ object WidgetAutoSyncManager {
     }
 
     /**
-     * Schedules the next background sync alarm with AlarmManager.
+     * Schedules the next background sync alarm with AlarmManager honoring [WidgetSyncMode].
      */
     fun scheduleNextSync(context: Context, delayMillis: Long? = null) {
         val appContext = context.applicationContext
-        if (!isAutoSyncEnabled(appContext)) {
+        val syncMode = getSyncMode(appContext)
+
+        if (syncMode == WidgetSyncMode.DISABLED || !isAutoSyncEnabled(appContext)) {
+            cancelSync(appContext)
             return
         }
 
@@ -187,9 +235,13 @@ object WidgetAutoSyncManager {
                 val followManager = FollowManager.getInstance(appContext)
                 followManager.cleanupExpiredFollowedMatches(appContext, matches)
                 val followedIds = followManager.getFollowedMatchIds()
-                calculateInterval(matches, followedIds)
+                calculateInterval(matches, followedIds, syncMode)
             } catch (_: Throwable) {
-                INTERVAL_DEFAULT_MILLIS
+                when (syncMode) {
+                    WidgetSyncMode.INTERVAL_15M -> 15 * 60 * 1000L
+                    WidgetSyncMode.INTERVAL_30M -> 30 * 60 * 1000L
+                    else -> INTERVAL_DEFAULT_MILLIS
+                }
             }
         }
 
@@ -271,10 +323,15 @@ object WidgetAutoSyncManager {
     }
 
     /**
-     * Generates a concise user-facing status string for the widget header.
+     * Generates a concise user-facing status string for the widget header honoring [WidgetSyncMode].
      */
-    fun getSyncStatusText(context: Context, hasLiveMatches: Boolean): String {
-        val isEnabled = isAutoSyncEnabled(context)
+    @JvmOverloads
+    fun getSyncStatusText(
+        context: Context,
+        hasLiveMatches: Boolean,
+        mode: WidgetSyncMode = getSyncMode(context)
+    ): String {
+        val isEnabled = isAutoSyncEnabled(context) && mode != WidgetSyncMode.DISABLED
         val lastSync = getLastSyncTime(context)
         val is24Hour = android.text.format.DateFormat.is24HourFormat(context)
         val timeString = if (lastSync > 0L) {
@@ -283,18 +340,21 @@ object WidgetAutoSyncManager {
             null
         }
 
-        return if (isEnabled) {
-            val intervalTag = if (hasLiveMatches) "1m" else "5m"
-            if (timeString != null) {
-                "⚡ Auto ($intervalTag) • $timeString"
-            } else {
-                "⚡ Auto ($intervalTag) • Active"
-            }
-        } else {
-            if (timeString != null) {
-                "Auto: OFF • $timeString"
-            } else {
-                "Auto: OFF"
+        if (!isEnabled || mode == WidgetSyncMode.DISABLED) {
+            return if (timeString != null) "Auto: OFF • $timeString" else "Auto: OFF"
+        }
+
+        return when (mode) {
+            WidgetSyncMode.DISABLED -> if (timeString != null) "Auto: OFF • $timeString" else "Auto: OFF"
+            WidgetSyncMode.INTERVAL_15M -> if (timeString != null) "⚡ Auto (15m) • $timeString" else "⚡ Auto (15m)"
+            WidgetSyncMode.INTERVAL_30M -> if (timeString != null) "⚡ Auto (30m) • $timeString" else "⚡ Auto (30m)"
+            WidgetSyncMode.ADAPTIVE -> {
+                val intervalTag = if (hasLiveMatches) "1m" else "5m"
+                if (timeString != null) {
+                    "⚡ Auto ($intervalTag) • $timeString"
+                } else {
+                    "⚡ Auto ($intervalTag) • Active"
+                }
             }
         }
     }

@@ -2,8 +2,12 @@ package com.usopen.tracker.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.VisibleForTesting
 import com.usopen.tracker.domain.model.Match
+import com.usopen.tracker.domain.model.MatchRetentionPolicy
 import com.usopen.tracker.domain.model.MatchState
+import com.usopen.tracker.domain.repository.SettingsRepository
+import com.usopen.tracker.data.repository.SettingsRepositoryImpl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,11 +15,12 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Manages followed (opt-in) match IDs using SharedPreferences with an in-memory StateFlow
  * for instant reactive UI updates and widget synchronization.
- * Also manages automatic 24-hour expiration and cleanup for completed matches.
+ * Also manages automatic dynamic expiration and cleanup for completed matches based on user retention settings.
  */
 class FollowManager(
     context: Context? = null,
-    preferences: SharedPreferences? = null
+    preferences: SharedPreferences? = null,
+    settingsRepository: SettingsRepository? = null
 ) {
 
     private val appContext: Context? = context?.applicationContext
@@ -24,12 +29,43 @@ class FollowManager(
         ?: appContext?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         ?: error("Either context or SharedPreferences must be provided to FollowManager")
 
+    private var settingsRepository: SettingsRepository? = settingsRepository
+
+    constructor(
+        context: Context?,
+        preferences: SharedPreferences?
+    ) : this(context, preferences, null)
+
+    constructor(
+        context: Context?,
+        settingsRepository: SettingsRepository?
+    ) : this(context, null as SharedPreferences?, settingsRepository)
+
     private val _followedMatchIds = MutableStateFlow<Set<String>>(loadFollowedMatchIds())
     val followedMatchIds: StateFlow<Set<String>> = _followedMatchIds.asStateFlow()
 
     private fun loadFollowedMatchIds(): Set<String> {
         val rawSet = prefs.getStringSet(KEY_FOLLOWED_MATCHES, null)
         return rawSet?.toSet() ?: emptySet()
+    }
+
+    @Volatile
+    private var manualRetentionPolicy: MatchRetentionPolicy? = null
+
+    fun attachSettingsRepository(repository: SettingsRepository) {
+        this.settingsRepository = repository
+    }
+
+    fun getSettingsRepository(): SettingsRepository? = settingsRepository
+
+    fun setRetentionPolicy(policy: MatchRetentionPolicy) {
+        this.manualRetentionPolicy = policy
+    }
+
+    fun getActiveRetentionPolicy(): MatchRetentionPolicy {
+        return manualRetentionPolicy
+            ?: settingsRepository?.getSettings()?.matchRetention
+            ?: MatchRetentionPolicy.HOURS_24
     }
 
     /**
@@ -42,9 +78,37 @@ class FollowManager(
     /**
      * Toggles the follow status of a match.
      * Returns true if the match is now followed, false if unfollowed.
-     * If the match is already finished and completed >= 24 hours ago, prevents following.
+     * If the match is already finished, checks whether it has expired under the active retention policy.
+     * When policy is NEVER, matches can be followed indefinitely without restriction.
      */
-    fun toggleFollow(context: Context? = appContext, matchId: String, match: Match? = null): Boolean {
+    fun toggleFollow(
+        context: Context? = appContext,
+        matchId: String,
+        match: Match? = null
+    ): Boolean {
+        return toggleFollow(context, matchId, match, null)
+    }
+
+    /**
+     * Overload supporting an explicit retention policy override.
+     */
+    fun toggleFollow(
+        context: Context?,
+        matchId: String,
+        match: Match?,
+        retentionPolicyOverride: MatchRetentionPolicy?
+    ): Boolean = toggleFollow(context, matchId, match, retentionPolicyOverride, System.currentTimeMillis())
+
+    /**
+     * Overload supporting an explicit retention policy override and reference timestamp.
+     */
+    fun toggleFollow(
+        context: Context?,
+        matchId: String,
+        match: Match?,
+        retentionPolicyOverride: MatchRetentionPolicy?,
+        nowMillis: Long
+    ): Boolean {
         val current = _followedMatchIds.value.toMutableSet()
         val isNowFollowed = if (current.contains(matchId)) {
             current.remove(matchId)
@@ -52,9 +116,10 @@ class FollowManager(
             false
         } else {
             if (match != null && match.state == MatchState.FINISHED) {
-                val completionTime = getCompletionTimestamp(match)
-                if (System.currentTimeMillis() - completionTime >= EXPIRATION_MILLIS) {
-                    // Match completed >= 24 hours ago, cannot follow
+                val policy = retentionPolicyOverride ?: getActiveRetentionPolicy()
+                val completionTime = getCompletionTimestamp(match, nowMillis)
+                if (policy.isExpired(completionTime, nowMillis)) {
+                    // Match completed >= retention duration ago, cannot follow
                     return false
                 }
             }
@@ -148,9 +213,8 @@ class FollowManager(
     }
 
     /**
-     * Automatically removes any followed matches that are in FINISHED state and have been completed for >= 24 hours.
-     * Also removes followed matches that are no longer in the active tournament schedule
-     * if their recorded completion timestamp is >= 24 hours old.
+     * Automatically removes any followed matches that are in FINISHED state and have expired under the active retention policy.
+     * When retention policy is NEVER, skips cleanup completely, retaining matches indefinitely.
      * Returns the set of match IDs that were removed.
      */
     fun cleanupExpiredFollowedMatches(
@@ -158,6 +222,23 @@ class FollowManager(
         allMatches: List<Match>,
         nowMillis: Long = System.currentTimeMillis()
     ): Set<String> {
+        return cleanupExpiredFollowedMatches(context, allMatches, nowMillis, null)
+    }
+
+    /**
+     * Overload supporting an explicit retention policy override.
+     */
+    fun cleanupExpiredFollowedMatches(
+        context: Context?,
+        allMatches: List<Match>,
+        nowMillis: Long,
+        retentionPolicyOverride: MatchRetentionPolicy?
+    ): Set<String> {
+        val policy = retentionPolicyOverride ?: getActiveRetentionPolicy()
+        if (policy == MatchRetentionPolicy.NEVER) {
+            return emptySet()
+        }
+
         val currentFollowed = _followedMatchIds.value
         if (currentFollowed.isEmpty()) return emptySet()
 
@@ -177,7 +258,7 @@ class FollowManager(
             if (match != null) {
                 if (match.state == MatchState.FINISHED) {
                     val completionTime = getCompletionTimestamp(match, nowMillis)
-                    if (nowMillis - completionTime >= EXPIRATION_MILLIS) {
+                    if (policy.isExpired(completionTime, nowMillis)) {
                         toRemove.add(matchId)
                         editor.remove(KEY_COMPLETED_PREFIX + matchId)
                     }
@@ -185,7 +266,7 @@ class FollowManager(
             } else {
                 // If match is no longer in tournament schedule or cache, check if it had a stored completion timestamp
                 val stored = prefs.getLong(KEY_COMPLETED_PREFIX + matchId, -1L)
-                if (stored > 0L && nowMillis - stored >= EXPIRATION_MILLIS) {
+                if (stored > 0L && policy.isExpired(stored, nowMillis)) {
                     toRemove.add(matchId)
                     editor.remove(KEY_COMPLETED_PREFIX + matchId)
                 }
@@ -234,7 +315,7 @@ class FollowManager(
         const val PREFS_NAME = "us_open_followed_matches"
         const val KEY_FOLLOWED_MATCHES = "followed_match_ids"
         const val KEY_COMPLETED_PREFIX = "match_completed_at_"
-        const val EXPIRATION_MILLIS = 24 * 60 * 60 * 1000L // 24 hours
+        const val EXPIRATION_MILLIS = 24 * 60 * 60 * 1000L // 24 hours canonical fallback
 
         @Volatile
         private var instance: FollowManager? = null
@@ -244,7 +325,24 @@ class FollowManager(
                 com.usopen.tracker.data.repository.ScoreboardRepositoryImpl.appContext = context.applicationContext
             } catch (_: Throwable) {}
             return instance ?: synchronized(this) {
-                instance ?: FollowManager(context.applicationContext).also { instance = it }
+                instance ?: run {
+                    val repo = try {
+                        SettingsRepositoryImpl.getInstance(context.applicationContext)
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    FollowManager(
+                        context = context.applicationContext,
+                        settingsRepository = repo
+                    ).also { instance = it }
+                }
+            }
+        }
+
+        @VisibleForTesting
+        fun resetInstanceForTesting() {
+            synchronized(this) {
+                instance = null
             }
         }
     }

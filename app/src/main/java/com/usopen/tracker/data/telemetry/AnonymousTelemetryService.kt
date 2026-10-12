@@ -7,7 +7,13 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.usopen.tracker.domain.telemetry.TelemetryEvent
 import com.usopen.tracker.domain.telemetry.TelemetryService
+import com.usopen.tracker.domain.repository.SettingsRepository
+import com.usopen.tracker.data.repository.SettingsRepositoryImpl
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -23,10 +29,11 @@ import java.util.concurrent.TimeUnit
  * Transmits non-identifiable lifecycle telemetry (app launches and active sessions)
  * to a configurable dashboard endpoint with automatic rate-limiting and local persistence.
  */
-class AnonymousTelemetryService(
+class AnonymousTelemetryService @JvmOverloads constructor(
     private val context: Context,
     private val client: OkHttpClient = defaultClient(),
-    private val defaultEndpoint: String = DEFAULT_ENDPOINT
+    private val defaultEndpoint: String = DEFAULT_ENDPOINT,
+    private var settingsRepository: SettingsRepository? = null
 ) : TelemetryService {
 
     companion object {
@@ -63,55 +70,95 @@ class AnonymousTelemetryService(
 
         fun getInstance(context: Context): AnonymousTelemetryService {
             return instance ?: synchronized(this) {
-                instance ?: AnonymousTelemetryService(context.applicationContext).also { instance = it }
+                instance ?: run {
+                    val repo = try {
+                        SettingsRepositoryImpl.getInstance(context.applicationContext)
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    AnonymousTelemetryService(
+                        context = context.applicationContext,
+                        settingsRepository = repo
+                    ).also { instance = it }
+                }
             }
         }
 
         @VisibleForTesting
         fun resetInstanceForTesting() {
             synchronized(this) {
+                instance?.let {
+                    it.settingsObserverJob?.cancel()
+                }
                 instance = null
             }
         }
     }
 
+    private var settingsObserverJob: Job? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    override fun isTelemetryEnabled(): Boolean {
-        return prefs.getBoolean(KEY_TELEMETRY_ENABLED, true)
+    init {
+        settingsRepository?.let { attachSettingsRepository(it) }
     }
 
-    override fun setTelemetryEnabled(enabled: Boolean) {
-        synchronized(lock) {
-            val editor = prefs.edit().putBoolean(KEY_TELEMETRY_ENABLED, enabled)
-            if (!enabled) {
-                // Privacy compliance (GDPR Right to Erasure): Purge stored anonymous UUID upon opt-out
-                editor.remove(KEY_ANONYMOUS_ID)
-                editor.remove(KEY_LAST_HEARTBEAT_TIME)
+    fun attachSettingsRepository(repository: SettingsRepository) {
+        this.settingsRepository = repository
+        val currentSettings = repository.getSettings()
+        syncWithSettings(currentSettings.telemetryEnabled, currentSettings.telemetryEndpoint)
+
+        settingsObserverJob?.cancel()
+        settingsObserverJob = serviceScope.launch {
+            repository.settings.collect { settings ->
+                syncWithSettings(settings.telemetryEnabled, settings.telemetryEndpoint)
             }
-            editor.apply()
         }
+    }
+
+    fun getSettingsRepository(): SettingsRepository? = settingsRepository
+
+    private fun syncWithSettings(enabled: Boolean, endpoint: String) {
+        synchronized(lock) {
+            val currentRepo = settingsRepository?.getSettings()
+            val currentRepoEnabled = currentRepo?.telemetryEnabled ?: enabled
+            if (enabled != currentRepoEnabled) {
+                return
+            }
+
+            val prefsEnabled = prefs.getBoolean(KEY_TELEMETRY_ENABLED, true)
+            if (prefsEnabled != currentRepoEnabled || (!currentRepoEnabled && prefs.contains(KEY_ANONYMOUS_ID))) {
+                setTelemetryEnabledInternal(currentRepoEnabled)
+            }
+            val cleanEndpoint = endpoint.trim()
+            val currentEndpoint = prefs.getString(KEY_ENDPOINT_URL, "") ?: ""
+            if (cleanEndpoint.isNotEmpty() && cleanEndpoint != currentEndpoint) {
+                try {
+                    setEndpointUrlInternal(cleanEndpoint)
+                } catch (_: Throwable) {}
+            } else if (cleanEndpoint.isEmpty() && currentEndpoint.isNotEmpty()) {
+                try {
+                    setEndpointUrlInternal("")
+                } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    private fun setTelemetryEnabledInternal(enabled: Boolean) {
+        val editor = prefs.edit().putBoolean(KEY_TELEMETRY_ENABLED, enabled)
+        if (!enabled) {
+            // Privacy compliance (GDPR Right to Erasure): Purge stored anonymous UUID upon opt-out
+            editor.remove(KEY_ANONYMOUS_ID)
+            editor.remove(KEY_LAST_HEARTBEAT_TIME)
+        }
+        editor.apply()
         Log.i(TAG, "Anonymous telemetry enabled=$enabled")
     }
 
-    override fun getAnonymousId(): String {
-        synchronized(lock) {
-            var id = prefs.getString(KEY_ANONYMOUS_ID, null)
-            if (id.isNullOrBlank()) {
-                id = UUID.randomUUID().toString()
-                prefs.edit().putString(KEY_ANONYMOUS_ID, id).apply()
-            }
-            return id
-        }
-    }
-
-    override fun getEndpointUrl(): String {
-        return prefs.getString(KEY_ENDPOINT_URL, defaultEndpoint) ?: defaultEndpoint
-    }
-
-    override fun setEndpointUrl(url: String) {
+    private fun setEndpointUrlInternal(url: String) {
         val cleanUrl = url.trim()
         if (cleanUrl.isNotEmpty()) {
             require(cleanUrl.startsWith("https://", ignoreCase = true)) {
@@ -120,6 +167,69 @@ class AnonymousTelemetryService(
             prefs.edit().putString(KEY_ENDPOINT_URL, cleanUrl).apply()
         } else {
             prefs.edit().remove(KEY_ENDPOINT_URL).apply()
+        }
+    }
+
+
+    override fun isTelemetryEnabled(): Boolean {
+        synchronized(lock) {
+            return prefs.getBoolean(KEY_TELEMETRY_ENABLED, true)
+        }
+    }
+
+    override fun setTelemetryEnabled(enabled: Boolean) {
+        synchronized(lock) {
+            setTelemetryEnabledInternal(enabled)
+            settingsRepository?.let { repo ->
+                if (repo.getSettings().telemetryEnabled != enabled) {
+                    try {
+                        kotlinx.coroutines.runBlocking {
+                            repo.updateTelemetryEnabled(enabled)
+                        }
+                    } catch (_: Throwable) {
+                        serviceScope.launch {
+                            try {
+                                repo.updateTelemetryEnabled(enabled)
+                            } catch (_: Throwable) {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun getAnonymousId(): String {
+        synchronized(lock) {
+            var id = prefs.getString(KEY_ANONYMOUS_ID, null)
+            if (id.isNullOrBlank()) {
+                val newId = UUID.randomUUID().toString()
+                if (isTelemetryEnabled()) {
+                    prefs.edit().putString(KEY_ANONYMOUS_ID, newId).apply()
+                }
+                return newId
+            }
+            return id
+        }
+    }
+
+    override fun getEndpointUrl(): String {
+        settingsRepository?.let {
+            val endpoint = it.getSettings().telemetryEndpoint
+            if (endpoint.isNotBlank()) return endpoint
+        }
+        return prefs.getString(KEY_ENDPOINT_URL, defaultEndpoint) ?: defaultEndpoint
+    }
+
+    override fun setEndpointUrl(url: String) {
+        setEndpointUrlInternal(url)
+        settingsRepository?.let { repo ->
+            if (repo.getSettings().telemetryEndpoint != url) {
+                serviceScope.launch {
+                    try {
+                        repo.updateTelemetryEndpoint(url)
+                    } catch (_: Throwable) {}
+                }
+            }
         }
     }
 
