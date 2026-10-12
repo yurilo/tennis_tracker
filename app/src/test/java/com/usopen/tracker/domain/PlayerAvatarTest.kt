@@ -50,15 +50,15 @@ class PlayerAvatarTest {
     fun testPlayerPhotoProvider_resolvesCuratedUrls() {
         val alcarazUrl = PlayerPhotoProvider.getPhotoUrl("Carlos Alcaraz")
         assertNotNull(alcarazUrl)
-        assertTrue(alcarazUrl!!.contains("4094.png"))
+        assertTrue(alcarazUrl!!.contains("wikimedia.org") && alcarazUrl.contains("Carlos_Alcaraz"))
 
         val sinnerUrl = PlayerPhotoProvider.getPhotoUrl("Jannik Sinner")
         assertNotNull(sinnerUrl)
-        assertTrue(sinnerUrl!!.contains("4096.png"))
+        assertTrue(sinnerUrl!!.contains("wikimedia.org") && sinnerUrl.contains("Jannik_Sinner"))
 
         val sabalenkaUrl = PlayerPhotoProvider.getPhotoUrl("Aryna Sabalenka")
         assertNotNull(sabalenkaUrl)
-        assertTrue(sabalenkaUrl!!.contains("3406.png"))
+        assertTrue(sabalenkaUrl!!.contains("wikimedia.org") && sabalenkaUrl.contains("Aryna_Sabalenka"))
     }
 
     @Test
@@ -69,10 +69,29 @@ class PlayerAvatarTest {
     }
 
     @Test
+    fun testPlayerPhotoProvider_discardsDefunctEspnCombinerUrl() {
+        val deadEspnUrl = "https://a.espncdn.com/combiner/i?img=/i/headshots/tennis/players/full/4094.png&w=350&h=254"
+        val resolved = PlayerPhotoProvider.getPhotoUrl(name = "Carlos Alcaraz", existingUrl = deadEspnUrl)
+        assertNotNull(resolved)
+        assertTrue(resolved!!.contains("wikimedia.org") && resolved.contains("Carlos_Alcaraz"))
+    }
+
+    @Test
     fun testPlayerPhotoProvider_resolvesFromCompetitor() {
         val competitor = Competitor(id = "1", name = "Coco Gauff")
         val resolved = PlayerPhotoProvider.getPhotoUrl(competitor)
         assertNotNull(resolved)
-        assertTrue(resolved!!.contains("4119.png"))
+        assertTrue(resolved!!.contains("wikimedia.org") && resolved.contains("Coco_Gauff"))
+    }
+
+    @Test
+    fun testPlayerPhotoProvider_normalizesDiacritics() {
+        val swiatekUrl = PlayerPhotoProvider.getPhotoUrl("Iga Świątek")
+        assertNotNull(swiatekUrl)
+        assertTrue(swiatekUrl!!.contains("wikimedia.org") && swiatekUrl.contains("Iga_Swiatek"))
+
+        val djokovicUrl = PlayerPhotoProvider.getPhotoUrl("Novak Đoković")
+        assertNotNull(djokovicUrl)
+        assertTrue(djokovicUrl!!.contains("wikimedia.org") && djokovicUrl.contains("Novak_Djokovic"))
     }
 }

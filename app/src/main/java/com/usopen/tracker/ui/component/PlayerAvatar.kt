@@ -42,10 +42,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import com.usopen.tracker.data.repository.ScoreboardRepositoryImpl
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 object PlayerImageCache {
-    private val memoryCache = object : LruCache<String, ImageBitmap>(50) {}
+    private val memoryCache = object : LruCache<String, ImageBitmap>(100) {}
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
@@ -57,20 +59,45 @@ object PlayerImageCache {
         memoryCache.put(url, bitmap)
     }
 
+    fun clear() {
+        memoryCache.evictAll()
+    }
+
     suspend fun loadImage(url: String?): ImageBitmap? {
-        if (url.isNullOrBlank()) return null
+        if (url.isNullOrBlank() || url.contains("espncdn.com")) return null
         get(url)?.let { return it }
 
         return withContext(Dispatchers.IO) {
+            val diskFile = getDiskCacheFile(url)
+            if (diskFile != null && diskFile.exists() && diskFile.length() > 0) {
+                try {
+                    val bytes = diskFile.readBytes()
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    if (bitmap != null) {
+                        val imageBitmap = bitmap.asImageBitmap()
+                        put(url, imageBitmap)
+                        return@withContext imageBitmap
+                    }
+                } catch (_: Throwable) {
+                    // Ignore corrupted disk file and re-fetch
+                }
+            }
+
             try {
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", "TennisTracker/1.0 (Android; dev@tennis.tracker)")
                     .build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val bytes = response.body?.bytes()
                         if (bytes != null && bytes.isNotEmpty()) {
+                            if (diskFile != null) {
+                                try {
+                                    diskFile.parentFile?.mkdirs()
+                                    diskFile.writeBytes(bytes)
+                                } catch (_: Throwable) {}
+                            }
                             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             if (bitmap != null) {
                                 val imageBitmap = bitmap.asImageBitmap()
@@ -85,6 +112,26 @@ object PlayerImageCache {
                 null
             }
         }
+    }
+
+    suspend fun loadPlayerBitmap(competitor: Competitor): ImageBitmap? {
+        val directUrl = competitor.photoUrl?.takeIf { !it.contains("espncdn.com") }
+            ?: PlayerPhotoProvider.getPhotoUrl(competitor)
+        if (directUrl != null) {
+            return loadImage(directUrl)
+        }
+        val resolvedUrl = PlayerPhotoProvider.resolvePhotoUrl(competitor)
+        if (!resolvedUrl.isNullOrBlank()) {
+            return loadImage(resolvedUrl)
+        }
+        return null
+    }
+
+    private fun getDiskCacheFile(url: String): File? {
+        val cacheDir = ScoreboardRepositoryImpl.appContext?.cacheDir ?: return null
+        val photosDir = File(cacheDir, "player_photos")
+        val filename = Integer.toHexString(url.hashCode()) + ".jpg"
+        return File(photosDir, filename)
     }
 }
 
@@ -235,10 +282,19 @@ private fun SingleAvatarCircle(
     isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val photoUrl = competitor.photoUrl ?: PlayerPhotoProvider.getPhotoUrl(competitor)
-    val imageBitmapState = produceState<ImageBitmap?>(initialValue = PlayerImageCache.get(photoUrl ?: ""), key1 = photoUrl) {
-        if (value == null && photoUrl != null) {
-            value = PlayerImageCache.loadImage(photoUrl)
+    val photoUrl = competitor.photoUrl?.takeIf { !it.contains("espncdn.com") }
+        ?: PlayerPhotoProvider.getPhotoUrl(competitor)
+    val imageBitmapState = produceState<ImageBitmap?>(
+        initialValue = photoUrl?.let { PlayerImageCache.get(it) },
+        key1 = competitor.name,
+        key2 = photoUrl
+    ) {
+        if (value == null) {
+            value = if (photoUrl != null) {
+                PlayerImageCache.loadImage(photoUrl)
+            } else {
+                PlayerImageCache.loadPlayerBitmap(competitor)
+            }
         }
     }
     val borderWidth = if (size >= 48.dp) 2.5.dp else 1.5.dp
