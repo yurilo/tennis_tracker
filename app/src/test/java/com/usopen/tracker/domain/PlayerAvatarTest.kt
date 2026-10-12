@@ -2,13 +2,24 @@ package com.usopen.tracker.domain
 
 import com.usopen.tracker.domain.model.Competitor
 import com.usopen.tracker.domain.model.PlayerPhotoProvider
+import com.usopen.tracker.domain.model.TennisTour
+import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 class PlayerAvatarTest {
+
+    @Before
+    @After
+    fun cleanUp() {
+        PlayerPhotoProvider.clearDynamicCache()
+    }
 
     @Test
     fun testPlayerInitials() {
@@ -47,21 +58,6 @@ class PlayerAvatarTest {
     }
 
     @Test
-    fun testPlayerPhotoProvider_resolvesCuratedUrls() {
-        val alcarazUrl = PlayerPhotoProvider.getPhotoUrl("Carlos Alcaraz")
-        assertNotNull(alcarazUrl)
-        assertTrue(alcarazUrl!!.contains("4094.png"))
-
-        val sinnerUrl = PlayerPhotoProvider.getPhotoUrl("Jannik Sinner")
-        assertNotNull(sinnerUrl)
-        assertTrue(sinnerUrl!!.contains("4096.png"))
-
-        val sabalenkaUrl = PlayerPhotoProvider.getPhotoUrl("Aryna Sabalenka")
-        assertNotNull(sabalenkaUrl)
-        assertTrue(sabalenkaUrl!!.contains("3406.png"))
-    }
-
-    @Test
     fun testPlayerPhotoProvider_preservesExistingUrl() {
         val customUrl = "https://example.com/player.png"
         val resolved = PlayerPhotoProvider.getPhotoUrl(name = "Unknown Player", existingUrl = customUrl)
@@ -69,10 +65,43 @@ class PlayerAvatarTest {
     }
 
     @Test
-    fun testPlayerPhotoProvider_resolvesFromCompetitor() {
-        val competitor = Competitor(id = "1", name = "Coco Gauff")
-        val resolved = PlayerPhotoProvider.getPhotoUrl(competitor)
-        assertNotNull(resolved)
-        assertTrue(resolved!!.contains("4119.png"))
+    fun testPlayerPhotoProvider_discardsDefunctEspnCombinerUrl() {
+        val deadEspnUrl = "https://a.espncdn.com/combiner/i?img=/i/headshots/tennis/players/full/4094.png&w=350&h=254"
+        val resolved = PlayerPhotoProvider.getPhotoUrl(name = "Carlos Alcaraz", existingUrl = deadEspnUrl)
+        // Must never return dead ESPN URL
+        assertNotEquals(deadEspnUrl, resolved)
+    }
+
+    @Test
+    fun testPlayerPhotoProvider_resolvesDynamicallyAndCaches() = runBlocking {
+        // Initially cold
+        assertNull(PlayerPhotoProvider.getPhotoUrl("Carlos Alcaraz"))
+
+        // Dynamic resolution
+        val resolved = PlayerPhotoProvider.resolvePhotoUrl("Carlos Alcaraz", TennisTour.ATP)
+        assertNotNull("Alcaraz photo should resolve dynamically", resolved)
+        assertTrue(resolved!!.contains("wikimedia.org") || resolved.contains("Alcaraz"))
+
+        // After resolution, synchronous getPhotoUrl returns the cached URL
+        val cached = PlayerPhotoProvider.getPhotoUrl("Carlos Alcaraz")
+        assertEquals(resolved, cached)
+    }
+
+    @Test
+    fun testPlayerPhotoProvider_resolvesWtaDynamically() = runBlocking {
+        val wtaUrl = PlayerPhotoProvider.resolvePhotoUrl("Iga Swiatek", TennisTour.WTA)
+        assertNotNull("WTA player should resolve dynamically", wtaUrl)
+        assertTrue("WTA photo should be from official WTA blob CDN or Wikipedia",
+            wtaUrl!!.contains("wtafiles.blob.core.windows.net") || wtaUrl.contains("wikimedia.org"))
+
+        // Synchronous getter returns cached URL
+        assertEquals(wtaUrl, PlayerPhotoProvider.getPhotoUrl("Iga Swiatek"))
+    }
+
+    @Test
+    fun testPlayerPhotoProvider_normalizesDiacritics() = runBlocking {
+        val djokovicUrl = PlayerPhotoProvider.resolvePhotoUrl("Novak Đoković", TennisTour.ATP)
+        assertNotNull(djokovicUrl)
+        assertTrue(djokovicUrl!!.contains("Djokovic") || djokovicUrl.contains("wikimedia.org"))
     }
 }
