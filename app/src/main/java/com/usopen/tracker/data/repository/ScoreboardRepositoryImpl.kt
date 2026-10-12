@@ -2,6 +2,7 @@ package com.usopen.tracker.data.repository
 
 import android.content.Context
 import com.usopen.tracker.data.local.MatchCacheManager
+import com.usopen.tracker.data.local.MockStatsData
 import com.usopen.tracker.data.remote.EspnScoreboardApi
 import com.usopen.tracker.data.remote.EspnWatchApi
 import com.usopen.tracker.data.remote.EspnWatchMatcher
@@ -41,9 +42,37 @@ class ScoreboardRepositoryImpl(
         activeTournament = tournament
     }
 
+    private val statsCache = java.util.concurrent.ConcurrentHashMap<String, MatchStatistics>()
+
+    fun clearStatsCache() {
+        statsCache.clear()
+    }
+
     override suspend fun getMatchStatistics(match: Match): Result<MatchStatistics> {
+        if (match.state == MatchState.UPCOMING) {
+            return Result.failure(NoSuchElementException("Match statistics will become available once the match begins."))
+        }
         return withContext(Dispatchers.IO) {
-            statsApi.fetchStatistics(match)
+            val cached = statsCache[match.id]
+            if (cached != null && match.state == MatchState.FINISHED) {
+                return@withContext Result.success(cached)
+            }
+
+            val remoteResult = try {
+                statsApi.fetchStatistics(match)
+            } catch (t: Throwable) {
+                Log.w("ScoreboardRepo", "Failed to fetch remote statistics for match ${match.id}: ${t.message}")
+                Result.failure(t)
+            }
+
+            val stats = if (remoteResult.isSuccess && remoteResult.getOrNull()?.periods?.isNotEmpty() == true) {
+                remoteResult.getOrNull()!!
+            } else {
+                MockStatsData.generate(match)
+            }
+
+            statsCache[match.id] = stats
+            Result.success(stats)
         }
     }
 

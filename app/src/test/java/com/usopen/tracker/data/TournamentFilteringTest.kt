@@ -30,11 +30,15 @@ class TournamentFilteringTest {
 
     @Before
     fun setUp() {
+        ScoreboardRepositoryImpl.appContext = null
+        ScoreboardViewModel.defaultSettingsRepositoryInstance = null
         MatchCacheManager.clearCache(null)
     }
 
     @After
     fun tearDown() {
+        ScoreboardRepositoryImpl.appContext = null
+        ScoreboardViewModel.defaultSettingsRepositoryInstance = null
         MatchCacheManager.clearCache(null)
     }
 
@@ -338,14 +342,18 @@ class TournamentFilteringTest {
             repository = fakeRepo,
             enableAutoRefresh = false
         )
-        coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()
+        try {
+            coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(Tournaments.ALL, viewModel.uiState.value.currentTournament)
+            assertEquals(Tournaments.ALL, viewModel.uiState.value.currentTournament)
 
-        viewModel.selectTournament(Tournaments.ROLAND_GARROS)
-        coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()
+            viewModel.selectTournament(Tournaments.ROLAND_GARROS)
+            coroutineTestRule.dispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(Tournaments.ROLAND_GARROS, viewModel.uiState.value.currentTournament)
-        assertEquals(Tournaments.ROLAND_GARROS, fakeRepo.getActiveTournament())
+            assertEquals(Tournaments.ROLAND_GARROS, viewModel.uiState.value.currentTournament)
+            assertEquals(Tournaments.ROLAND_GARROS, fakeRepo.getActiveTournament())
+        } finally {
+            viewModel.cleanup()
+        }
     }
 }

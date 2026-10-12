@@ -715,16 +715,31 @@ private fun PeriodStatsContent(
     ) {
         // Overview Comparison Bars (Key Highlights)
         val keyStats = listOfNotNull(
-            period.findItem("Service", "1st Serve Percentage")
-                ?: period.findItem("Service", "1st serve %"),
-            period.findItem("Winners", "Total Winners")
-                ?: period.findItem("Service", "Aces"),
-            period.findItem("Unforced Errors", "Total Unforced Errors")
-                ?: period.findItem("Service", "Double faults"),
-            period.findItem("Return", "Break Points Converted")
-                ?: period.findItem("Return", "Break points won"),
-            period.findItem("Points", "Total Points Won")
-                ?: period.findItem("Points", "Total points")
+            (period.findItem("Service", "1st Serve Percentage")
+                ?: period.findItem("Service", "1st serve %")
+                ?: period.findItem("Service", "First serve"))?.let {
+                    if (it.name != "1st Serve Percentage") it.copy(name = "1st Serve Percentage") else it
+                },
+            (period.findItem("Winners", "Total Winners")
+                ?: period.findItem("Winners", "Total")
+                ?: period.findItem("Service", "Aces"))?.let {
+                    if (it.name == "Total") it.copy(name = "Total Winners") else it
+                },
+            (period.findItem("Unforced Errors", "Total Unforced Errors")
+                ?: period.findItem("Unforced errors", "Total")
+                ?: period.findItem("Service", "Double faults"))?.let {
+                    if (it.name == "Total") it.copy(name = "Total Unforced Errors") else it
+                },
+            (period.findItem("Return", "Break Points Converted")
+                ?: period.findItem("Return", "Break points converted")
+                ?: period.findItem("Return", "Break points won"))?.let {
+                    if (it.name != "Break Points Converted") it.copy(name = "Break Points Converted") else it
+                },
+            (period.findItem("Points", "Total Points Won")
+                ?: period.findItem("Points", "Total")
+                ?: period.findItem("Points", "Total points"))?.let {
+                    if (it.name != "Total Points Won") it.copy(name = "Total Points Won") else it
+                }
         )
 
         if (keyStats.isNotEmpty()) {

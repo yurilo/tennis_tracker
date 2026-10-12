@@ -1,6 +1,7 @@
 package com.usopen.tracker.data
 
 import com.usopen.tracker.data.local.MatchCacheManager
+import com.usopen.tracker.data.local.MockStatsData
 import com.usopen.tracker.data.local.MockTournamentData
 import com.usopen.tracker.data.remote.EspnScoreboardApi
 import com.usopen.tracker.data.remote.EspnWatchApi
@@ -12,6 +13,7 @@ import com.usopen.tracker.domain.model.MatchState
 import com.usopen.tracker.domain.model.MatchStatistics
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -104,5 +106,103 @@ class ScoreboardRepositoryTest {
         val result = repository.getMatchStatistics(upcomingMatch)
 
         assertTrue("Result should fail for upcoming match without stats", result.isFailure)
+    }
+
+    @Test
+    fun `getMatchStatistics should return valid statistics for finished match when remote api fails`() = runBlocking {
+        val repository = createRepository()
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+        val result = repository.getMatchStatistics(finishedMatch)
+
+        assertTrue("Result should succeed with fallback statistics", result.isSuccess)
+        val stats = result.getOrNull()
+        assertNotNull(stats)
+        assertEquals(finishedMatch.id, stats!!.matchId)
+        assertTrue("Must contain periods including Match", stats.periods.isNotEmpty())
+        val matchPeriod = stats.periods.firstOrNull { it.period == "ALL" }
+        assertNotNull(matchPeriod)
+        assertTrue("Must contain Service group", matchPeriod!!.groups.any { it.groupName == "Service" })
+        assertTrue("Must contain Winners group", matchPeriod.groups.any { it.groupName == "Winners" })
+        assertTrue("Must contain Points group", matchPeriod.groups.any { it.groupName == "Points" })
+    }
+
+    @Test
+    fun `getMatchStatistics should return valid statistics for live match when remote api fails`() = runBlocking {
+        val repository = createRepository()
+        val liveMatch = MockTournamentData.matches.first { it.state == MatchState.LIVE }
+        val result = repository.getMatchStatistics(liveMatch)
+
+        assertTrue("Result should succeed with fallback statistics", result.isSuccess)
+        val stats = result.getOrNull()
+        assertNotNull(stats)
+        assertEquals(liveMatch.id, stats!!.matchId)
+        assertTrue("Must contain periods", stats.periods.isNotEmpty())
+    }
+
+    @Test
+    fun `getMatchStatistics should return remote statistics when remote api succeeds`() = runBlocking {
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+        val customStats = MockStatsData.generate(finishedMatch).copy(
+            player1Name = "Remote Player 1"
+        )
+        val succeedingStatsApi = object : TennisStatsApi() {
+            override fun fetchStatistics(match: Match): Result<MatchStatistics> =
+                Result.success(customStats)
+        }
+        val repository = ScoreboardRepositoryImpl(
+            context = null,
+            statsApi = succeedingStatsApi
+        )
+        val result = repository.getMatchStatistics(finishedMatch)
+
+        assertTrue(result.isSuccess)
+        assertEquals("Remote Player 1", result.getOrNull()?.player1Name)
+    }
+
+    @Test
+    fun `getMatchStatistics should cache statistics for finished matches`() = runBlocking {
+        var apiFetchCount = 0
+        val trackingStatsApi = object : TennisStatsApi() {
+            override fun fetchStatistics(match: Match): Result<MatchStatistics> {
+                apiFetchCount++
+                return Result.failure(java.io.IOException("Remote unavailable"))
+            }
+        }
+        val repository = ScoreboardRepositoryImpl(
+            context = null,
+            statsApi = trackingStatsApi
+        )
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+
+        val firstResult = repository.getMatchStatistics(finishedMatch)
+        assertTrue(firstResult.isSuccess)
+        assertEquals(1, apiFetchCount)
+
+        val secondResult = repository.getMatchStatistics(finishedMatch)
+        assertTrue(secondResult.isSuccess)
+        assertEquals("Subsequent call should use in-memory cache without calling API again", 1, apiFetchCount)
+    }
+
+    @Test
+    fun `clearStatsCache should purge in-memory statistics cache`() = runBlocking {
+        var apiFetchCount = 0
+        val trackingStatsApi = object : TennisStatsApi() {
+            override fun fetchStatistics(match: Match): Result<MatchStatistics> {
+                apiFetchCount++
+                return Result.failure(java.io.IOException("Remote unavailable"))
+            }
+        }
+        val repository = ScoreboardRepositoryImpl(
+            context = null,
+            statsApi = trackingStatsApi
+        )
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+
+        repository.getMatchStatistics(finishedMatch)
+        assertEquals(1, apiFetchCount)
+
+        repository.clearStatsCache()
+        repository.getMatchStatistics(finishedMatch)
+        assertEquals("After cache clear, should query stats API again", 2, apiFetchCount)
     }
 }

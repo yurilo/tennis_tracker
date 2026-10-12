@@ -77,4 +77,66 @@ class MatchStatsParsingTest {
         val missingResult = api.parseStatisticsJson("{}", match)
         org.junit.Assert.assertNull("Missing statistics array must return null", missingResult)
     }
+
+    @Test
+    fun `MockStatsData generates complete and valid statistics for completed match with set scores`() {
+        val match = MockTournamentData.matches.first { it.state == com.usopen.tracker.domain.model.MatchState.FINISHED }
+        val stats = com.usopen.tracker.data.local.MockStatsData.generate(match)
+
+        assertNotNull("Generated stats must not be null", stats)
+        assertEquals(match.id, stats.matchId)
+        assertEquals(match.player1.name, stats.player1Name)
+        assertEquals(match.player2.name, stats.player2Name)
+
+        val matchPeriod = stats.periods.firstOrNull { it.period == "ALL" }
+        assertNotNull("Must contain ALL (Match) period", matchPeriod)
+        assertEquals("Match", matchPeriod!!.label)
+
+        // Verify key groups in Match period
+        val groupNames = matchPeriod.groups.map { it.groupName }
+        assertTrue("Must have Service stats", groupNames.contains("Service"))
+        assertTrue("Must have Winners stats", groupNames.contains("Winners"))
+        assertTrue("Must have Unforced errors stats", groupNames.contains("Unforced errors"))
+        assertTrue("Must have Return stats", groupNames.contains("Return"))
+        assertTrue("Must have Points stats", groupNames.contains("Points"))
+
+        // Verify set periods
+        val setPeriods = stats.periods.filter { it.period != "ALL" }
+        assertTrue("Must contain at least 2 sets for finished match", setPeriods.size >= 2)
+        assertEquals("1ST", setPeriods[0].period)
+        assertEquals("Set 1", setPeriods[0].label)
+        assertEquals("2ND", setPeriods[1].period)
+        assertEquals("Set 2", setPeriods[1].label)
+
+        // Verify all stat ratios are within [0.05, 0.95]
+        for (period in stats.periods) {
+            for (group in period.groups) {
+                for (item in group.items) {
+                    assertTrue(
+                        "Stat item '${item.name}' ratio ${item.homeRatio} must be between 0.05 and 0.95",
+                        item.homeRatio in 0.05f..0.95f
+                    )
+                    assertTrue("Home display must not be empty", item.homeDisplay.isNotEmpty())
+                    assertTrue("Away display must not be empty", item.awayDisplay.isNotEmpty())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `MockStatsData generates valid statistics for live match and match with empty set scores`() {
+        val liveMatch = MockTournamentData.matches.first { it.state == com.usopen.tracker.domain.model.MatchState.LIVE }
+        val liveStats = com.usopen.tracker.data.local.MockStatsData.generate(liveMatch)
+
+        assertNotNull(liveStats)
+        assertTrue("Must contain at least Match period and current set", liveStats.periods.isNotEmpty())
+
+        val emptyScoresMatch = liveMatch.copy(
+            player1 = liveMatch.player1.copy(setScores = emptyList()),
+            player2 = liveMatch.player2.copy(setScores = emptyList())
+        )
+        val statsWithEmptyScores = com.usopen.tracker.data.local.MockStatsData.generate(emptyScoresMatch)
+        assertNotNull(statsWithEmptyScores)
+        assertTrue(statsWithEmptyScores.periods.any { it.period == "ALL" })
+    }
 }

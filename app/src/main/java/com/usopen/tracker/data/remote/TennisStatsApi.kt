@@ -51,19 +51,19 @@ open class TennisStatsApi(
         val p2Last = match.player2.name.split(" ").lastOrNull()?.lowercase() ?: ""
         if (p1Last.isEmpty() && p2Last.isEmpty()) return Pair(null, true)
 
-        searchEventsUrl("$SOFASCORE_BASE/sport/tennis/events/live", p1Last, p2Last)?.let {
-            return it
-        }
-
-        searchEventsUrl("$SOFASCORE_BASE/tournament/$US_OPEN_ATP_TOURNAMENT/season/$US_OPEN_ATP_SEASON/events/last/0", p1Last, p2Last)?.let {
-            return it
-        }
-        searchEventsUrl("$SOFASCORE_BASE/tournament/$US_OPEN_WTA_TOURNAMENT/season/$US_OPEN_WTA_SEASON/events/last/0", p1Last, p2Last)?.let {
-            return it
-        }
-
-        val queryName = p1Last.ifEmpty { p2Last }
         try {
+            searchEventsUrl("$SOFASCORE_BASE/sport/tennis/events/live", p1Last, p2Last)?.let {
+                return it
+            }
+
+            searchEventsUrl("$SOFASCORE_BASE/tournament/$US_OPEN_ATP_TOURNAMENT/season/$US_OPEN_ATP_SEASON/events/last/0", p1Last, p2Last)?.let {
+                return it
+            }
+            searchEventsUrl("$SOFASCORE_BASE/tournament/$US_OPEN_WTA_TOURNAMENT/season/$US_OPEN_WTA_SEASON/events/last/0", p1Last, p2Last)?.let {
+                return it
+            }
+
+            val queryName = p1Last.ifEmpty { p2Last }
             val encoded = URLEncoder.encode(queryName, "UTF-8")
             val searchUrl = "$SOFASCORE_BASE/search/all?q=$encoded"
             val request = Request.Builder()
@@ -73,6 +73,9 @@ open class TennisStatsApi(
                 .build()
 
             val response = client.newCall(request).execute()
+            if (response.code == 403) {
+                return Pair(null, true)
+            }
             if (response.isSuccessful) {
                 val body = response.body?.string()
                 if (!body.isNullOrEmpty()) {
@@ -106,6 +109,9 @@ open class TennisStatsApi(
                 .build()
 
             val response = client.newCall(request).execute()
+            if (response.code == 403) {
+                throw java.io.IOException("Remote stats provider returned HTTP 403 Forbidden")
+            }
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: return null
                 val root = JSONObject(body)

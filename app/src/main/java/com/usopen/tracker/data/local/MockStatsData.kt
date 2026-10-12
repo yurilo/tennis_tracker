@@ -1,6 +1,7 @@
 package com.usopen.tracker.data.local
 
 import com.usopen.tracker.domain.model.Match
+import com.usopen.tracker.domain.model.MatchState
 import com.usopen.tracker.domain.model.MatchStatistics
 import com.usopen.tracker.domain.model.PeriodStats
 import com.usopen.tracker.domain.model.StatGroup
@@ -12,11 +13,20 @@ object MockStatsData {
         val p1 = match.player1
         val p2 = match.player2
 
-        val p1Wins = p1.isWinner || (p1.setScores.sum() > p2.setScores.sum())
-        val p1AceCount = if (p1Wins) 9 else 5
-        val p2AceCount = if (p1Wins) 6 else 8
-        val p1DfCount = if (p1Wins) 2 else 5
-        val p2DfCount = if (p1Wins) 4 else 3
+        val p1Wins = when {
+            p1.isWinner -> true
+            p2.isWinner -> false
+            else -> p1.setScores.sum() >= p2.setScores.sum()
+        }
+
+        val hash = (match.id.hashCode() and 0x7fffffff)
+        val p1AceBonus = (hash % 5)
+        val p2AceBonus = ((hash / 5) % 5)
+
+        val p1AceCount = if (p1Wins) 7 + p1AceBonus else 4 + (p1AceBonus % 3)
+        val p2AceCount = if (p1Wins) 4 + (p2AceBonus % 3) else 7 + p2AceBonus
+        val p1DfCount = if (p1Wins) 1 + (hash % 3) else 3 + (hash % 3)
+        val p2DfCount = if (p1Wins) 3 + ((hash / 3) % 3) else 1 + ((hash / 3) % 3)
 
         val allPeriod = PeriodStats(
             period = "ALL",
@@ -74,15 +84,34 @@ object MockStatsData {
         val periodsList = mutableListOf(allPeriod)
 
         val setScoresCount = maxOf(p1.setScores.size, p2.setScores.size)
-        for (idx in 0 until setScoresCount) {
+        val effectiveSetCount = if (setScoresCount > 0) {
+            setScoresCount
+        } else if (match.state == MatchState.FINISHED) {
+            2
+        } else if (match.state == MatchState.LIVE) {
+            1
+        } else {
+            0
+        }
+
+        for (idx in 0 until effectiveSetCount) {
             val setNumber = idx + 1
-            val p1SetScore = p1.setScores.getOrNull(idx) ?: 0
-            val p2SetScore = p2.setScores.getOrNull(idx) ?: 0
+            val p1SetScore = p1.setScores.getOrNull(idx) ?: if (p1Wins) 6 else 4
+            val p2SetScore = p2.setScores.getOrNull(idx) ?: if (p1Wins) 4 else 6
             val setWinner = p1SetScore > p2SetScore
+
+            val periodCode = when (setNumber) {
+                1 -> "1ST"
+                2 -> "2ND"
+                3 -> "3RD"
+                4 -> "4TH"
+                5 -> "5TH"
+                else -> "${setNumber}TH"
+            }
 
             periodsList.add(
                 PeriodStats(
-                    period = "${setNumber}ST".replace("1ST", "1ST").replace("2ST", "2ND").replace("3ST", "3RD").replace("4ST", "4TH").replace("5ST", "5TH"),
+                    period = periodCode,
                     label = "Set $setNumber",
                     groups = listOf(
                         StatGroup(
@@ -113,6 +142,14 @@ object MockStatsData {
                             groupName = "Return",
                             items = listOf(
                                 createItem("Break points converted", if (setWinner) "1/2 (50%)" else "0/2 (0%)", if (setWinner) "0/2 (0%)" else "1/2 (50%)", if (setWinner) 0.75f else 0.25f)
+                            )
+                        ),
+                        StatGroup(
+                            groupName = "Points",
+                            items = listOf(
+                                createItem("Total", if (setWinner) "${28 + p1SetScore}" else "${22 + p1SetScore}", if (setWinner) "${22 + p2SetScore}" else "${28 + p2SetScore}"),
+                                createItem("Service points won", if (setWinner) "18/24 (75%)" else "14/23 (61%)", if (setWinner) "15/25 (60%)" else "18/26 (69%)", if (setWinner) 0.54f else 0.46f),
+                                createItem("Receiver points won", if (setWinner) "10/25 (40%)" else "7/26 (27%)", if (setWinner) "6/24 (25%)" else "9/23 (39%)", if (setWinner) 0.60f else 0.40f)
                             )
                         )
                     )
