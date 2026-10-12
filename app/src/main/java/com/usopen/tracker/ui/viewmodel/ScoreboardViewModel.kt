@@ -29,6 +29,15 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.usopen.tracker.data.remote.YouTubeHighlightResolver
 import com.usopen.tracker.domain.usecase.DeepLinkGenerator
 import com.usopen.tracker.util.IntentLauncher
+import com.usopen.tracker.domain.model.AppSettings
+import com.usopen.tracker.domain.model.AutoRefreshInterval
+import com.usopen.tracker.domain.model.MatchRetentionPolicy
+import com.usopen.tracker.domain.model.StartupTournamentTier
+import com.usopen.tracker.domain.model.WidgetSyncMode
+import com.usopen.tracker.domain.repository.SettingsRepository
+import com.usopen.tracker.data.repository.SettingsRepositoryImpl
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 enum class MatchFilter(val label: String) {
     ALL("All Matches"),
@@ -66,16 +75,32 @@ class ScoreboardViewModel(
     private val repository: ScoreboardRepository = ScoreboardRepositoryImpl(),
     private val h2hRepository: H2HRepository = H2HRepository(),
     private var followManager: FollowManager? = null,
-    private val enableAutoRefresh: Boolean = true
+    private val enableAutoRefresh: Boolean = true,
+    private var settingsRepository: SettingsRepository = defaultSettingsRepository()
 ) : ViewModel() {
+
+    constructor(
+        repository: ScoreboardRepository,
+        settingsRepository: SettingsRepository
+    ) : this(repository, H2HRepository(), null, true, settingsRepository)
+
+    constructor(
+        settingsRepository: SettingsRepository
+    ) : this(ScoreboardRepositoryImpl(), H2HRepository(), null, true, settingsRepository)
+
+    private val initialTier: TourTierFilter = settingsRepository.getSettings().defaultTournament.tourTierFilter
 
     private val _uiState = MutableStateFlow(
         ScoreboardUiState(
             isLoading = true,
-            currentTournament = repository.getActiveTournament(),
-            selectedTierFilter = TourTierFilter.ALL,
-            contextualTournaments = computeContextualTournaments(emptyList(), TourTierFilter.ALL),
-            availableTournaments = computeContextualTournaments(emptyList(), TourTierFilter.ALL)
+            currentTournament = if (initialTier != TourTierFilter.ALL) {
+                getTierAllTournament(initialTier).also { repository.setActiveTournament(it) }
+            } else {
+                repository.getActiveTournament()
+            },
+            selectedTierFilter = initialTier,
+            contextualTournaments = computeContextualTournaments(emptyList(), initialTier),
+            availableTournaments = computeContextualTournaments(emptyList(), initialTier)
         )
     )
     val uiState: StateFlow<ScoreboardUiState> = _uiState.asStateFlow()
@@ -92,18 +117,107 @@ class ScoreboardViewModel(
     private val _h2hUiState = MutableStateFlow(H2HUiState())
     val h2hUiState: StateFlow<H2HUiState> = _h2hUiState.asStateFlow()
 
+    val settings: StateFlow<AppSettings>
+        get() = settingsRepository.settings
+
+    private var loadMatchesJob: kotlinx.coroutines.Job? = null
+    private var silentRefreshJob: kotlinx.coroutines.Job? = null
     private var autoRefreshJob: kotlinx.coroutines.Job? = null
     private var followObserverJob: kotlinx.coroutines.Job? = null
+    private var settingsObserverJob: kotlinx.coroutines.Job? = null
+    private var currentRefreshIntervalMillis: Long? = null
+
+    fun updateAutoRefreshInterval(interval: AutoRefreshInterval) {
+        viewModelScope.launch {
+            settingsRepository.updateAutoRefreshInterval(interval)
+        }
+    }
+
+    fun updateMatchRetention(policy: MatchRetentionPolicy) {
+        viewModelScope.launch {
+            settingsRepository.updateMatchRetention(policy)
+        }
+    }
+
+    fun updateWidgetSyncMode(mode: WidgetSyncMode) {
+        viewModelScope.launch {
+            settingsRepository.updateWidgetSyncMode(mode)
+        }
+    }
+
+    fun updateDefaultTournament(tier: StartupTournamentTier) {
+        viewModelScope.launch {
+            settingsRepository.updateDefaultTournament(tier)
+        }
+    }
+
+    fun updateTelemetryEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateTelemetryEnabled(enabled)
+        }
+    }
+
+    fun updateTelemetryEndpoint(endpoint: String) {
+        viewModelScope.launch {
+            settingsRepository.updateTelemetryEndpoint(endpoint)
+        }
+    }
+
+    fun resetSettingsToDefaults() {
+        viewModelScope.launch {
+            settingsRepository.resetToDefaults()
+        }
+    }
 
     init {
+        if (initialTier != TourTierFilter.ALL) {
+            selectTierFilter(initialTier)
+        }
         loadMatches(forceRefresh = false)
         if (enableAutoRefresh) {
-            startAutoRefresh()
+            val initialInterval = settingsRepository.getSettings().autoRefreshInterval
+            if (initialInterval.isEnabled) {
+                startAutoRefresh(initialInterval.periodMillis)
+            }
+            startSettingsObserver()
         }
         followManager?.let { fm ->
             attachFollowManager(fm)
         }
     }
+
+    private fun startSettingsObserver() {
+        settingsObserverJob?.cancel()
+        settingsObserverJob = viewModelScope.launch {
+            settingsRepository.settings
+                .map { it.autoRefreshInterval }
+                .distinctUntilChanged()
+                .collect { interval ->
+                    if (interval.isEnabled) {
+                        if (interval.periodMillis != currentRefreshIntervalMillis || autoRefreshJob == null || autoRefreshJob?.isActive != true) {
+                            startAutoRefresh(interval.periodMillis)
+                        }
+                    } else {
+                        stopAutoRefresh()
+                    }
+                }
+        }
+    }
+
+    fun attachSettingsRepository(repo: SettingsRepository) {
+        settingsRepository = repo
+        if (enableAutoRefresh) {
+            val interval = repo.getSettings().autoRefreshInterval
+            if (interval.isEnabled) {
+                startAutoRefresh(interval.periodMillis)
+            } else {
+                stopAutoRefresh()
+            }
+            startSettingsObserver()
+        }
+    }
+
+    fun getSettingsRepository(): SettingsRepository = settingsRepository
 
     fun initFollowManager(context: Context) {
         val appCtx = context.applicationContext
@@ -171,6 +285,7 @@ class ScoreboardViewModel(
     }
 
     fun startAutoRefresh(intervalMillis: Long = 60_000L) {
+        currentRefreshIntervalMillis = intervalMillis
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
@@ -181,18 +296,25 @@ class ScoreboardViewModel(
     }
 
     fun stopAutoRefresh() {
+        currentRefreshIntervalMillis = null
         autoRefreshJob?.cancel()
         autoRefreshJob = null
     }
 
     /**
-     * Cancels all active background jobs (auto-refresh and follow observer).
+     * Cancels all active background jobs (auto-refresh, follow observer, settings observer, and match loading).
      * Useful in tests and component destruction to prevent coroutines from leaking or looping indefinitely.
      */
     fun cleanup() {
+        loadMatchesJob?.cancel()
+        loadMatchesJob = null
+        silentRefreshJob?.cancel()
+        silentRefreshJob = null
         stopAutoRefresh()
         followObserverJob?.cancel()
         followObserverJob = null
+        settingsObserverJob?.cancel()
+        settingsObserverJob = null
     }
 
     public override fun onCleared() {
@@ -233,7 +355,8 @@ class ScoreboardViewModel(
     }
 
     fun loadMatches(forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        loadMatchesJob?.cancel()
+        loadMatchesJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = repository.getScoreboard(forceRefresh)
 
@@ -271,7 +394,8 @@ class ScoreboardViewModel(
                 notifyWidgetUpdate()
 
                 if (!forceRefresh && enableAutoRefresh) {
-                    viewModelScope.launch {
+                    silentRefreshJob?.cancel()
+                    silentRefreshJob = viewModelScope.launch {
                         refreshSilently()
                     }
                 }
@@ -672,6 +796,59 @@ class ScoreboardViewModel(
                 listOf(tierAllOption) + canonicalDefaults
             }
         }
+
+        val inMemoryFallback: SettingsRepository by lazy { InMemorySettingsRepository() }
+
+        @Volatile
+        var defaultSettingsRepositoryInstance: SettingsRepository? = null
+
+        fun defaultSettingsRepository(): SettingsRepository {
+            defaultSettingsRepositoryInstance?.let { return it }
+            val ctx = ScoreboardRepositoryImpl.appContext
+            if (ctx != null) {
+                try {
+                    return SettingsRepositoryImpl.getInstance(ctx)
+                } catch (_: Throwable) {}
+            }
+            return inMemoryFallback
+        }
     }
 }
+
+private class InMemorySettingsRepository(
+    initialSettings: AppSettings = AppSettings.DEFAULT
+) : SettingsRepository {
+    private val _settings = MutableStateFlow(initialSettings)
+    override val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+    override fun getSettings(): AppSettings = _settings.value
+
+    override suspend fun updateAutoRefreshInterval(interval: AutoRefreshInterval) {
+        _settings.value = _settings.value.copy(autoRefreshInterval = interval)
+    }
+
+    override suspend fun updateMatchRetention(policy: MatchRetentionPolicy) {
+        _settings.value = _settings.value.copy(matchRetention = policy)
+    }
+
+    override suspend fun updateWidgetSyncMode(mode: WidgetSyncMode) {
+        _settings.value = _settings.value.copy(widgetSyncMode = mode)
+    }
+
+    override suspend fun updateDefaultTournament(tier: StartupTournamentTier) {
+        _settings.value = _settings.value.copy(defaultTournament = tier)
+    }
+
+    override suspend fun updateTelemetryEnabled(enabled: Boolean) {
+        _settings.value = _settings.value.copy(telemetryEnabled = enabled)
+    }
+
+    override suspend fun updateTelemetryEndpoint(endpoint: String) {
+        _settings.value = _settings.value.copy(telemetryEndpoint = endpoint)
+    }
+
+    override suspend fun resetToDefaults() {
+        _settings.value = AppSettings.DEFAULT
+    }
+}
+
 

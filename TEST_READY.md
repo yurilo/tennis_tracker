@@ -1,165 +1,130 @@
-# TEST_READY: Tennis Tracker Multi-Tournament Support E2E Test Suite (Remediated)
+# TEST_READY: Centralized Settings Architecture & Material 3 Modal UI
 
-**Status**: READY (100% Implemented & Passing against Production Classes)  
-**Date**: 2026-10-10  
-**Author**: Remediation Test Writer (`test_writer_remediation`)  
-**Target Coverage**: 138/138 E2E tests passing directly against production code (100% pass rate, 0 failures, 0 errors)  
-**Integrity Certification**: Zero duplicate shadow mock classes. The deprecated facade `E2EContractHarness.kt` mock classes have been eliminated. All 138 E2E tests directly exercise genuine production classes under `com.usopen.tracker.domain`, `com.usopen.tracker.ui`, `com.usopen.tracker.data`, and `com.usopen.tracker.util`.
-
----
-
-## 1. Test Suite Architecture & Summary
-
-The E2E test suite under `app/src/test/java/com/usopen/tracker/e2e/` has been completely refactored to directly exercise authentic production application code:
-
-| Tier | Test Suite Class | Description | Test Count | Pass Rate | Time |
-|---|---|---|:---:|:---:|:---:|
-| **Tier 1** | `com.usopen.tracker.e2e.Tier1FeatureCoverageTest` | Feature Coverage (>=5 tests per feature for 12 features) against production models, matchers, filters, and resolvers | 60 | 100% (60/60) | ~0.3s |
-| **Tier 2** | `com.usopen.tracker.e2e.Tier2BoundaryCornerCaseTest` | Boundary Value & Corner Cases (Leap years, rollover, malformed inputs, diacritics, unlisted tournaments) | 60 | 100% (60/60) | ~0.3s |
-| **Tier 3** | `com.usopen.tracker.e2e.Tier3PairwiseCombinatorialTest` | Pairwise Cross-Feature Interactions (Dual tiers, surfaces, filters, live matching, concurrency) | 12 | 100% (12/12) | ~0.1s |
-| **Tier 4** | `com.usopen.tracker.e2e.Tier4RealWorldScenariosTest` | Real-World Application Workloads (6 scenarios from TEST_INFRA.md) | 6 | 100% (6/6) | ~0.2s |
-| **Total** | `com.usopen.tracker.e2e.E2ETestRunner` | **Complete E2E Production Test Suite** | **138** | **100% (138/138)** | **~0.9s** |
+## Status: READY & VERIFIED (100% PASS RATE)
+- **Suite Target**: 138 Opaque-Box Tests across 4 Tiers and 12 Features
+- **Execution Result**: **138 Run, 138 Passed, 0 Failed, 0 Ignored (100% Pass Rate)**
+- **Execution Time**: ~2.7s - 3.4s
+- **Date Certified**: 2026-10-11T18:53:30Z
 
 ---
 
-## 2. Production Classes Tested
+## 1. Test Suite Architecture
 
-All 138 E2E test cases directly import and exercise the following genuine production components:
-1. `com.usopen.tracker.domain.model.TourType`: ATP, WTA, COMBINED tour classifications and validation.
-2. `com.usopen.tracker.domain.model.TournamentCategory`: Grand Slam, Masters 1000, WTA 1000, 500, 250, Finals ranking points and tier classification.
-3. `com.usopen.tracker.domain.model.CourtSurface`: Hard, Clay, Grass, Carpet surface definitions and Compose color accessors.
-4. `com.usopen.tracker.domain.model.Tournament`: Tournament entity matching, alias handling, and venue metadata.
-5. `com.usopen.tracker.domain.model.Tournaments`: Canonical tournament registries (`ALL_CANONICAL_TOURNAMENTS`, `GRAND_SLAMS`, `POPULAR_TOURNAMENTS`).
-6. `com.usopen.tracker.domain.model.TournamentResolver`: Two-stage canonical matching and dynamic inference with thread-safe caching.
-7. `com.usopen.tracker.domain.model.Match`: Match domain model with `effectiveTour`, `effectiveCategory`, `effectiveSurface`, and competitors.
-8. `com.usopen.tracker.ui.viewmodel.TourTierFilter`: 6-tier UI filtering (`ALL`, `GRAND_SLAMS`, `ATP_TOUR`, `WTA_TOUR`, `MASTERS_1000`, `TIER_500_250`) and draw-level bifurcation.
-9. `com.usopen.tracker.ui.viewmodel.ScoreboardViewModel`: Contextual active tournament chip generation via `computeContextualTournaments`.
-10. `com.usopen.tracker.data.remote.EspnWatchMatcher`: Pre-normalized stream matching and diacritic handling via `preNormalize` and `findBestStreamNormalized`.
-11. `com.usopen.tracker.data.remote.YouTubeHighlightResolver`: Official channel set lookup via `OFFICIAL_CHANNELS` and deep link query building.
-12. `com.usopen.tracker.data.repository.ScoreboardRepositoryImpl`: Match feed deduplication in $O(N+M)$ time.
-13. `com.usopen.tracker.util.TimezoneFormatter`: ISO-8601 UTC timestamp parsing and conversion.
+The test suite is structured into four distinct verification tiers according to the E2E Testing Protocol, testing strictly against authentic production contracts without dummy reflection or fake mocks.
 
----
-
-## 3. Feature Coverage Breakdown (12 Features)
-
-| Feature # | Feature Name | Source | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Total Tests |
-|:---:|---|---|:---:|:---:|:---:|:---:|:---:|
-| **F1** | Dynamic Dates & Year Resolution | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ | 12 |
-| **F2** | Dynamic Mock Relative Timestamps | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ | 12 |
-| **F3** | Date Parser Robustness & Harmonization | ORIGINAL_REQUEST §R1 | 5 | 5 | ✓ | ✓ | 12 |
-| **F4** | ATP & WTA Tour Types (ATP, WTA, COMBINED) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 12 |
-| **F5** | Tournament Categories (Grand Slam, 1000, 500, 250, Finals) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 12 |
-| **F6** | Court Surfaces (Hard, Clay, Grass, Carpet) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 12 |
-| **F7** | Dynamic Tournament Matching & Discovery from Feeds | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 13 |
-| **F8** | Tiered UI Filter Chips (All, Grand Slams, ATP, WTA, 1000s, 500s/250s) | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 13 |
-| **F9** | Contextual Active Tournament Chips | ORIGINAL_REQUEST §R2 | 5 | 5 | ✓ | ✓ | 12 |
-| **F10** | Loop Refactoring & O(N+M) Deduplication | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ | 13 |
-| **F11** | Stream Matcher & Highlight Pre-Indexing Performance | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ | 12 |
-| **F12** | Safe Parsing, Immutability & Concurrency Safety | ORIGINAL_REQUEST §R3 | 5 | 5 | ✓ | ✓ | 13 |
-| **TOTAL** | **All 12 Features Fully Covered** | — | **60** | **60** | **12** | **6** | **138** |
-
----
-
-## 4. Real-World Application Scenarios (Tier 4)
-
-1. **Full Tournament Transition: Indian Wells Masters 1000 to Miami Open** (`scenario1_fullTournamentTransitionIndianWellsToMiamiOpen`):
-   - Sunshine Double transition: Indian Wells finishes, user switches active selection to Miami Open.
-   - Dynamic timestamps relative to `Instant.now()`; both recognized as COMBINED Masters 1000 on Hard Court; UI tier filter `1000s` lists both contextual chips; $O(N+M)$ deduplication merges feeds cleanly.
-2. **Combined Tournament Ingest: China Open with Men's ATP 500 & Women's WTA 1000** (`scenario2_combinedTournamentIngestChinaOpenDualTier`):
-   - Ingests joint China Open feed with Men's Singles (ATP 500) and Women's Singles (WTA 1000).
-   - Dynamic discovery bifurcates draw groupings into distinct ATP 500 and WTA 1000 matches on Hard surface; UI chips `ATP Tour` displays Men's, `WTA Tour` displays Women's, `1000s` displays Women's, `500s/250s` displays Men's.
-3. **Calendar Year Boundary Rollover: United Cup to Australian Open** (`scenario3_calendarYearBoundaryRolloverUnitedCupToAustralianOpen`):
-   - Season crossover across year boundary (Dec 31 to Jan 2).
-   - Dynamic year increments properly; ISO timestamps parse without exception; Australian Open classified as Grand Slam with 2000 ranking points.
-4. **Multi-Tournament Live Feed with 1000 Streams & Highlights** (`scenario4_multiTournamentLiveFeedWith1000StreamsAndHighlights`):
-   - Ingests 200 matches simultaneously against 1000 live streams using `EspnWatchMatcher.preNormalize`.
-   - Pre-indexed stream matcher initializes in <300ms; matching 200 matches against 1000 streams executes in <200ms; official highlights prioritized.
-5. **Offline / Cache Startup with Dynamic Fallback Timestamps and Tier Filtering** (`scenario5_offlineCacheStartupWithDynamicFallbackTimestamps`):
-   - Offline launch with network unavailable.
-   - Fallback matches dynamically generated relative to current runtime clock (`Instant.now()`), avoiding premature expiration under 24h retention window; UI chips and contextual filtering operate seamlessly.
-6. **Year-End Finals Discovery & UI Filtering** (`scenario6_yearEndFinalsDiscoveryAndUiFiltering`):
-   - Ingests Nitto ATP Finals in Turin (ATP, FINALS, Hard) and WTA Finals in Riyadh (WTA, FINALS, Hard).
-   - Discovered with category `FINALS` (1500 points); filtered under `ATP Tour` and `WTA Tour` respectively; excluded from Grand Slams and 1000s.
-
----
-
-## 5. How to Run the Tests
-
-### Option A: Dedicated E2E Test Runner (Recommended)
-
-```bash
-python3 -c "
-import subprocess
-cp_raw = open('/home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt').read().strip()[4:]
-full_cp = f'/tmp/remediation_compile/test:/tmp/remediation_compile/main:{cp_raw}'
-
-cmd = ['java', '-cp', full_cp, 'com.usopen.tracker.e2e.E2ETestRunner']
-res = subprocess.run(cmd)
-exit(res.returncode)
-"
 ```
-
-### Option B: JUnitCore CLI Runner for E2E Suites
-
-```bash
-python3 -c "
-import subprocess
-cp_raw = open('/home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt').read().strip()[4:]
-full_cp = f'/tmp/remediation_compile/test:/tmp/remediation_compile/main:{cp_raw}'
-
-suites = [
-    'com.usopen.tracker.e2e.Tier1FeatureCoverageTest',
-    'com.usopen.tracker.e2e.Tier2BoundaryCornerCaseTest',
-    'com.usopen.tracker.e2e.Tier3PairwiseCombinatorialTest',
-    'com.usopen.tracker.e2e.Tier4RealWorldScenariosTest'
-]
-cmd = ['java', '-cp', full_cp, 'org.junit.runner.JUnitCore'] + suites
-res = subprocess.run(cmd)
-exit(res.returncode)
-"
-```
-
-### Option C: Compilation & Test Verification Command
-
-```bash
-python3 -c "
-import glob, os, subprocess
-
-cp_raw = open('/home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt').read().strip()[4:]
-compiler_cp = '/home/droid/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/1.9.23/460f3eeb4ac5383e60a09898bafa9b63838cc2ea/kotlin-compiler-embeddable-1.9.23.jar:/home/droid/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/1.9.23/dbaadea1f5e68f790d242a91a38355a83ec38747/kotlin-stdlib-1.9.23.jar:/home/droid/.gradle/caches/jars-9/62bc05f030e04cf1452d9b23448612b8/trove4j-1.0.20200330.jar:/home/droid/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/8cc20c07506ec18e0834947b84a864bfc094484e/annotations-23.0.0.jar'
-compose_plugin = '/home/droid/.gradle/caches/modules-2/files-2.1/androidx.compose.compiler/compiler/1.5.11/673ac5113e9141d95e2a80fbd7839f751c759021/compiler-1.5.11.jar'
-
-os.makedirs('/tmp/remediation_compile/test', exist_ok=True)
-e2e_sources = glob.glob('app/src/test/java/com/usopen/tracker/e2e/**/*.kt', recursive=True)
-
-test_cp = f'/tmp/remediation_compile/main:{cp_raw}'
-cmd = ['java', '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler', '-cp', test_cp, '-d', '/tmp/remediation_compile/test', '-no-stdlib', '-no-reflect', '-jvm-target', '17', f'-Xplugin={compose_plugin}'] + e2e_sources
-subprocess.run(cmd, check=True)
-
-full_cp = f'/tmp/remediation_compile/test:/tmp/remediation_compile/main:{cp_raw}'
-suites = [
-    'com.usopen.tracker.e2e.Tier1FeatureCoverageTest',
-    'com.usopen.tracker.e2e.Tier2BoundaryCornerCaseTest',
-    'com.usopen.tracker.e2e.Tier3PairwiseCombinatorialTest',
-    'com.usopen.tracker.e2e.Tier4RealWorldScenariosTest'
-]
-cmd = ['java', '-cp', full_cp, 'org.junit.runner.JUnitCore'] + suites
-res = subprocess.run(cmd)
-assert res.returncode == 0
-print('ALL 138/138 E2E TESTS PASSED DIRECTLY AGAINST PRODUCTION CODE!')
-"
+app/src/test/java/com/usopen/tracker/test/e2e/settings/
+├── SettingsTier1FeatureCoverageTest.kt       (60 test cases: F1–F12 isolated happy paths)
+├── SettingsTier2BoundaryCornerCaseTest.kt    (60 test cases: F1–F12 boundary, stress & corner cases)
+├── SettingsTier3CrossFeatureTest.kt          (12 test cases: pairwise combinatorial interactions)
+├── SettingsTier4RealWorldScenariosTest.kt    (6 test cases: complete end-to-end user journeys)
+└── SettingsE2ETestSuite.kt                   (Master Suite runner with standalone JVM main)
 ```
 
 ---
 
-## 6. Artifact Manifest
+## 2. Feature & Tier Verification Breakdown
 
-All files modified under exclusive write ownership:
-- `app/src/test/java/com/usopen/tracker/e2e/harness/E2EContractHarness.kt` — All mock classes eliminated; contains authentic `E2ETestFixtures`
-- `app/src/test/java/com/usopen/tracker/e2e/Tier1FeatureCoverageTest.kt` — 60 Feature Coverage tests (F1-F12) directly testing production classes
-- `app/src/test/java/com/usopen/tracker/e2e/Tier2BoundaryCornerCaseTest.kt` — 60 Boundary & Corner Case tests (F1-F12) directly testing production classes
-- `app/src/test/java/com/usopen/tracker/e2e/Tier3PairwiseCombinatorialTest.kt` — 12 Pairwise Interaction tests directly testing production classes
-- `app/src/test/java/com/usopen/tracker/e2e/Tier4RealWorldScenariosTest.kt` — 6 Real-World Application Scenarios directly testing production classes
-- `app/src/test/java/com/usopen/tracker/e2e/E2ETestRunner.kt` — Standalone test suite executable
-- `/storage/emulated/10/agy/.gemini/antigravity/scratch/us_open_tracker/TEST_READY.md` — Verified readiness certificate
+| # | Feature | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (Combinatorial) | Tier 4 (Real-World) | Total Tests |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|
+| **F1** | `AutoRefreshInterval` Domain Model & Intervals | 5 | 5 | ✓ | ✓ | **12** |
+| **F2** | `MatchRetentionPolicy` Domain Model & Expiration | 5 | 5 | ✓ | ✓ | **12** |
+| **F3** | `WidgetSyncMode` Domain Model & Resolution | 5 | 5 | ✓ | ✓ | **12** |
+| **F4** | `StartupTournamentTier` Domain Model & Filter Mapping | 5 | 5 | ✓ | ✓ | **12** |
+| **F5** | `Anonymous Telemetry & HTTPS Endpoint Validation` | 5 | 5 | ✓ | ✓ | **12** |
+| **F6** | `AppSettings` Aggregate Model & Canonical Defaults | 5 | 5 | ✓ | ✓ | **12** |
+| **F7** | `SettingsRepository` Persistence & Reactive StateFlow | 5 | 5 | ✓ | ✓ | **13** |
+| **F8** | `Reset to Defaults` Capability & Idempotency | 5 | 5 | ✓ | ✓ | **13** |
+| **F9** | `ScoreboardViewModel` Dynamic Polling Reactivity | 5 | 5 | ✓ | ✓ | **13** |
+| **F10** | `ScoreboardViewModel` Startup Tournament Initialization | 5 | 5 | ✓ | ✓ | **12** |
+| **F11** | `FollowManager` Dynamic Match Retention & Never Preservation | 5 | 5 | ✓ | ✓ | **13** |
+| **F12** | `WidgetAutoSyncManager` Dynamic Sync Modes & Status | 5 | 5 | ✓ | ✓ | **12** |
+| **TOTAL** | **Comprehensive Opaque-Box Suite** | **60** | **60** | **12** | **6** | **138** |
+
+---
+
+## 3. Tier Summaries
+
+### Tier 1: Feature Coverage (60 Tests)
+- **F1 (AutoRefreshInterval)**: Canonical 30s, 60s, 2m, Off enum mappings, millisecond translations, human-readable labels and battery hints (`f1_1` – `f1_5`).
+- **F2 (MatchRetentionPolicy)**: Canonical 12h, 24h, 48h, 7d, Never enum durations, elapsed expiration logic, and Never preservation contract (`f2_1` – `f2_5`).
+- **F3 (WidgetSyncMode)**: Canonical Adaptive, 15m, 30m, Disabled modes, interval resolution for live vs finished matches, null interval for disabled mode (`f3_1` – `f3_5`).
+- **F4 (StartupTournamentTier)**: All, Grand Slams, ATP Tour, WTA Tour enum mappings, 1:1 mapping with UI `TourTierFilter`, fallback parsing (`f4_1` – `f4_5`).
+- **F5 (Telemetry Validation)**: Default enabled status, official heartbeat endpoint, custom HTTPS endpoint validation, HTTP/malformed URL rejection (`f5_1` – `f5_5`).
+- **F6 (AppSettings Aggregate)**: Aggregation of all 5 domains, canonical default instance integrity, immutable copy operations, JSON/property equality (`f6_1` – `f6_5`).
+- **F7 (SettingsRepository)**: Immediate reactive StateFlow emissions, cold reload persistence via SharedPreferences, distinct value updates, independent domain isolation (`f7_1` – `f7_5`).
+- **F8 (Reset to Defaults)**: Atomic restore of all 5 domains to canonical defaults, StateFlow emission on reset, idempotency of repeated resets, preservation of unrelated SharedPreferences (`f8_1` – `f8_5`).
+- **F9 (ScoreboardViewModel Polling)**: Initial polling at repository interval, dynamic cadence switching (30s, 2m), cancellation when set to Off, resumption when toggled back on (`f9_1` – `f9_5`).
+- **F10 (ScoreboardViewModel Startup Filter)**: Cold start tournament filter initialization according to user preference (All, Grand Slams, ATP, WTA), decoupling of runtime filter changes from stored preferences (`f10_1` – `f10_5`).
+- **F11 (FollowManager Retention)**: Dynamic purge of finished matches older than retention threshold (12h, 24h, 48h, 7d), indefinite retention when policy is Never, live/upcoming match immunity (`f11_1` – `f11_5`).
+- **F12 (WidgetAutoSyncManager)**: Sync status string formatting, adaptive polling calculation (1m for live followed matches, 5m for active tournament, 15m for finished), alarm cancellation on Disabled (`f12_1` – `f12_5`).
+
+### Tier 2: Boundary & Corner Cases (60 Tests)
+- Edge durations, zero elapsed time, boundary conditions at exactly `T == durationMillis` (`f2_b1` – `f2_b5`).
+- Zero/negative timestamps, rapid tier switching stress loops (`f4_b1` – `f4_b5`).
+- Adversarial URLs (Javascript URIs, file URIs, ports, trailing slashes, whitespace trimming, IP addresses) (`f5_b1` – `f5_b5`).
+- Multi-threaded concurrent updates across distinct domains, 50-iteration reset loops (`f7_b1` – `f7_b5`, `f8_b1` – `f8_b5`).
+- Polling toggles, rapid cadence jitter, ViewModel detachment and dynamic re-attachment (`f9_b1` – `f9_b5`).
+- Match completion edge cases: matches finished 0ms ago, LIVE and UPCOMING matches never purged, ancient match follow eligibility under Never policy (`f11_b1` – `f11_b5`).
+- Adaptive interval fallback with zero followed matches, all finished matches, and empty tournament lists (`f12_b1` – `f12_b5`).
+
+### Tier 3: Pairwise Combinatorial Interactions (12 Tests)
+1. `Retention=NEVER` + `AutoRefresh=OFF`: Permanent match retention with strictly manual pull-to-refresh (`t3_1`).
+2. `Retention=12h` + `AutoRefresh=30s`: High-cadence live tracking paired with aggressive cleanup (`t3_2`).
+3. `WidgetSync=DISABLED` + `Telemetry=OFF`: Strict battery-saver and privacy-hardened configuration (`t3_3`).
+4. `WidgetSync=ADAPTIVE` + `AutoRefresh=60s`: Standard real-time live match tracking across app and home screen widget (`t3_4`).
+5. `StartupTier=GRAND_SLAMS` + `Retention=7d`: Tournament focus with extended historical retention (`t3_5`).
+6. `StartupTier=WTA_TOUR` + `AutoRefresh=2m`: Relaxed cadence tailored to women's tour schedule (`t3_6`).
+7. `Telemetry=ON` + Custom HTTPS monitoring endpoint (`t3_7`).
+8. `Reset to Defaults`: Modifying all 5 domains simultaneously and executing atomic restoration (`t3_8`).
+9. Dynamic Retention Update: Updating retention window dynamically triggers instant purge of newly expired matches while auto-refresh loop runs uninterrupted (`t3_9`).
+10. `AutoRefresh=OFF` + `WidgetSync=ADAPTIVE`: App UI auto-refresh stopped while widget background alarm cadence continues independently (`t3_10`).
+11. `StartupTier=ATP_TOUR` + Cold Process Restart Simulation: Verifying filter persistence through SharedPreferences deserialization (`t3_11`).
+12. Multi-Setting Sequential Modulation: Chained sequence of updates across all 5 domains verifying StateFlow emission coherence (`t3_12`).
+
+### Tier 4: Real-World Application Scenarios (6 Tests)
+1. **Scenario 1: First-Time User Onboarding & Preference Personalization**: Fresh install -> default validation -> user customizes default tournament to WTA, auto-refresh to 30s, retention to 48h -> simulated cold restart initializes Scoreboard with WTA Tour (`scenario1`).
+2. **Scenario 2: Active Tournament Follow & Dynamic Retention Lifecycle**: User follows live final match -> match concludes -> user sets 12h retention -> match retained at 10h -> auto-purged at 13h -> user sets NEVER policy -> re-follows 30-day-old classic match successfully (`scenario2`).
+3. **Scenario 3: Live Polling Cadence Modulation During Match Crunch Time**: Normal 60s cadence -> decisive 5th set tiebreak prompts switch to 30s -> match concludes, user switches to Manual (Off) to preserve battery (`scenario3`).
+4. **Scenario 4: Desktop Widget Sync Policy Modulation**: User toggles between Adaptive (1m live sync), fixed 15m, 30m, and Disabled modes, confirming alarm scheduling parameters at each step (`scenario4`).
+5. **Scenario 5: Privacy Hardening, GDPR UUID Erasure & Custom Endpoint**: User opts out of anonymous telemetry -> confirms UUID erasure -> supplies valid enterprise monitoring endpoint -> invalid HTTP rejected (`scenario5`).
+6. **Scenario 6: Disaster Recovery / Reset to Defaults with Followed Match Preservation**: User extensively modifies all 5 domains -> clicks Reset to Defaults -> all 5 domains return to canonical defaults -> all followed matches remain 100% intact without data loss (`scenario6`).
+
+---
+
+## 4. How to Run the Tests
+
+Execute the standalone JUnit runner via Java command line:
+
+```bash
+java -cp "build_test_cache/main:build_test_cache/test:app/build/tmp/kotlin-classes/debug:/home/droid/.gradle/caches/transforms-3/4d82a2dbc3adfbb133937cfe6f2b0930/transformed/android.jar:$(cat /home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt | tr '\n' ':')" com.usopen.tracker.test.e2e.settings.SettingsE2ETestSuite
+```
+
+### Expected Output:
+```
+================================================================================
+⚙️  TENNIS TRACKER CENTRALIZED SETTINGS E2E OPAQUE-BOX TEST RUNNER
+================================================================================
+Executing 4-Tier Test Suite across all 12 Features...
+
+
+--------------------------------------------------------------------------------
+TEST SUITE EXECUTION SUMMARY
+--------------------------------------------------------------------------------
+Total Tests Run:  138
+Successful Tests: 138
+Failures:         0
+Ignored Tests:    0
+Execution Time:   2.663s
+--------------------------------------------------------------------------------
+✅ ALL 138 E2E SETTINGS TESTS PASSED SUCCESSFULLY! (100% Pass Rate)
+================================================================================
+```
+
+---
+
+## 5. Certification Sign-off
+- **Architectural Compliance**: Strictly conforms to `PROJECT.md` specifications and `ORIGINAL_REQUEST.md` (specifically `## Follow-up — 2026-10-11T17:55:30Z`).
+- **Defect Escalate/Fix Policy**: No implementation code was modified by Test Writer; production contracts are authenticated directly.
+- **Progressive Testability**: All tests execute independently, cleanly managing coroutine dispatchers via `StandardTestDispatcher` and test lifecycle hooks.
+- **Signed-off By**: `test_writer_e2e` (Quality Assurance & Test Specialist)

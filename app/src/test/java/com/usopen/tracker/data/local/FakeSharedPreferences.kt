@@ -6,34 +6,42 @@ class FakeSharedPreferences : SharedPreferences {
 
     private val data = mutableMapOf<String, Any?>()
 
+    @Synchronized
     override fun getAll(): MutableMap<String, *> = HashMap(data)
 
+    @Synchronized
     override fun getString(key: String?, defValue: String?): String? {
         return (data[key] as? String) ?: defValue
     }
 
     @Suppress("UNCHECKED_CAST")
+    @Synchronized
     override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
         val set = data[key] as? Set<String>
         return set?.toMutableSet() ?: defValues
     }
 
+    @Synchronized
     override fun getInt(key: String?, defValue: Int): Int {
         return (data[key] as? Int) ?: defValue
     }
 
+    @Synchronized
     override fun getLong(key: String?, defValue: Long): Long {
         return (data[key] as? Long) ?: defValue
     }
 
+    @Synchronized
     override fun getFloat(key: String?, defValue: Float): Float {
         return (data[key] as? Float) ?: defValue
     }
 
+    @Synchronized
     override fun getBoolean(key: String?, defValue: Boolean): Boolean {
         return (data[key] as? Boolean) ?: defValue
     }
 
+    @Synchronized
     override fun contains(key: String?): Boolean {
         return data.containsKey(key)
     }
@@ -95,16 +103,18 @@ class FakeSharedPreferences : SharedPreferences {
         }
 
         override fun apply() {
-            if (clearAll) {
-                data.clear()
+            synchronized(this@FakeSharedPreferences) {
+                if (clearAll) {
+                    data.clear()
+                }
+                for (key in removals) {
+                    data.remove(key)
+                }
+                data.putAll(modifications)
+                removals.clear()
+                modifications.clear()
+                clearAll = false
             }
-            for (key in removals) {
-                data.remove(key)
-            }
-            data.putAll(modifications)
-            removals.clear()
-            modifications.clear()
-            clearAll = false
         }
     }
 }
