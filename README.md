@@ -4,7 +4,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.19)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.19/TennisTracker-v1.0.19.apk)**
+📥 **[Download Latest APK (v1.0.20)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.20/TennisTracker-v1.0.20.apk)**
 
 ---
 
@@ -13,6 +13,9 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 - **Global Tournament Coverage**: Real-time match scores, schedules, and results across all Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) and ATP / WTA Tour tournaments.
 - **Tournament Selector**: Interactive tournament filter row to switch between "All Tournaments" or scope to specific Grand Slams and Masters events.
 - **Live Tennis Scoreboard**: Real-time match scores, set scores, game status, serve indicators, and seed badges for ATP Men's and WTA Women's tournaments.
+- **Dynamic Player Headshots & Avatars**:
+  - Scalable, zero-hardcoding resolution engine fetching official player portraits from the WTA Tour API (`api.wtatennis.com`) and Wikipedia/Wikimedia REST APIs.
+  - Persistent multi-tier on-device caching (`SharedPreferences` + disk cache + LRU memory cache) for instant offline and repeat rendering across H2H, Match Stats, and Doubles views.
 - **Head-to-Head (H2H) & Match Stats**:
   - Comprehensive comparison sheets with Tale of the Tape, key stats, serve percentages, break points, and winners/unforced errors.
   - Resilient statistics fallback with in-memory caching ensuring completed and live matches always display rich court statistics even when remote providers face network restrictions.
