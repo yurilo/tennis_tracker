@@ -644,7 +644,10 @@ class ScoreboardViewModel(
             match.venue.lowercase().contains(q) ||
             (match.court?.lowercase()?.contains(q) == true) ||
             (match.displayCourt?.lowercase()?.contains(q) == true) ||
-            match.statusDetail.lowercase().contains(q)
+            match.statusDetail.lowercase().contains(q) ||
+            match.tournamentName.lowercase().contains(q) ||
+            (match.tournament?.displayName?.lowercase()?.contains(q) == true) ||
+            (match.tournament?.aliases?.any { it.lowercase().contains(q) } == true)
     }
 
     fun launchWatch(context: Context, match: Match) {
@@ -782,19 +785,21 @@ class ScoreboardViewModel(
                 it.id.lowercase()
             }
 
-            return if (activeTournaments.isNotEmpty()) {
-                listOf(tierAllOption) + activeTournaments
-            } else {
-                val canonicalDefaults = when (tier) {
-                    TourTierFilter.ALL -> Tournaments.POPULAR_TOURNAMENTS.filterNot { it.id == "all" }
-                    TourTierFilter.GRAND_SLAMS -> Tournaments.GRAND_SLAMS
-                    TourTierFilter.MASTERS_1000 -> Tournaments.MASTERS_1000_LIST
-                    TourTierFilter.ATP_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isAtp || it.tour == TourType.COMBINED }.take(8)
-                    TourTierFilter.WTA_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isWta || it.tour == TourType.COMBINED }.take(8)
-                    TourTierFilter.TIER_500_250 -> (Tournaments.ATP_500_LIST + Tournaments.WTA_500_LIST + Tournaments.ATP_250_LIST).take(8)
-                }
-                listOf(tierAllOption) + canonicalDefaults
+            val canonicalDefaults = when (tier) {
+                TourTierFilter.ALL -> Tournaments.POPULAR_TOURNAMENTS.filterNot { it.id == "all" }
+                TourTierFilter.GRAND_SLAMS -> Tournaments.GRAND_SLAMS
+                TourTierFilter.MASTERS_1000 -> Tournaments.MASTERS_1000_LIST
+                TourTierFilter.ATP_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isAtp || it.tour == TourType.COMBINED }
+                TourTierFilter.WTA_TOUR -> Tournaments.ALL_CANONICAL_TOURNAMENTS.filter { it.tour.isWta || it.tour == TourType.COMBINED }
+                TourTierFilter.TIER_500_250 -> (Tournaments.ATP_500_LIST + Tournaments.WTA_500_LIST + Tournaments.ATP_250_LIST + Tournaments.WTA_250_LIST)
             }
+
+            // Put active tournaments with live/scheduled matches first, followed by canonical tournaments
+            val remainingCanonical = canonicalDefaults.filterNot { cd ->
+                activeTournaments.any { it.id.equals(cd.id, ignoreCase = true) }
+            }
+
+            return listOf(tierAllOption) + activeTournaments + remainingCanonical
         }
 
         val inMemoryFallback: SettingsRepository by lazy { InMemorySettingsRepository() }

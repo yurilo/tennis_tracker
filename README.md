@@ -4,14 +4,20 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.20)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.20/TennisTracker-v1.0.20.apk)**
+📥 **[Download Latest APK (v1.0.21)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.21/TennisTracker-v1.0.21.apk)**
 
 ---
 
 ## 🌟 Features
 
-- **Global Tournament Coverage**: Real-time match scores, schedules, and results across all Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) and ATP / WTA Tour tournaments.
-- **Tournament Selector**: Interactive tournament filter row to switch between "All Tournaments" or scope to specific Grand Slams and Masters events.
+- **Global Tournament Coverage**: Real-time match scores, schedules, and results across all Grand Slams, ATP Tour, and WTA Tour tournaments (including Shanghai Open, Indian Wells, Miami, Madrid, Rome, Cincinnati, and year-round 500/250 events).
+- **Copy-Friendly UX**:
+  - Interactive **Match Copy Bottom Sheet** with 1-tap copy actions for quick sharing.
+  - Granular copy options: full match recap, clean score summary (e.g. `Alcaraz d. Sinner 6-4, 3-6, 7-6(3)`), competitor names, and tournament/round details.
+  - Haptic feedback and native Android clipboard confirmations.
+- **Intelligent Tournament Name Limiting**:
+  - `shortDisplayName` abbreviations for verbose tournament titles ensuring clean, readable UI chips and header banners.
+  - Single-line chips with graceful ellipsis truncation preventing visual clutter or multi-line breaks.
 - **Live Tennis Scoreboard**: Real-time match scores, set scores, game status, serve indicators, and seed badges for ATP Men's and WTA Women's tournaments.
 - **Dynamic Player Headshots & Avatars**:
   - Scalable, zero-hardcoding resolution engine fetching official player portraits from the WTA Tour API (`api.wtatennis.com`) and Wikipedia/Wikimedia REST APIs.

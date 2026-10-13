@@ -17,8 +17,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -36,6 +46,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +71,10 @@ import com.usopen.tracker.ui.theme.UsOpenNavy
 import com.usopen.tracker.ui.theme.UsOpenNavyDark
 import com.usopen.tracker.ui.theme.UsOpenTennisGreen
 import com.usopen.tracker.ui.theme.TennisVoltYellow
+import com.usopen.tracker.util.ClipboardHelper
+import com.usopen.tracker.util.CopyTextFormatter
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MatchCard(
     match: Match,
@@ -68,16 +84,32 @@ fun MatchCard(
     onHighlightsClick: ((Match) -> Unit)? = null,
     isFollowed: Boolean = false,
     onFollowClick: ((Match) -> Unit)? = null,
+    onCopyClick: ((Match) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val statsButtonColor = if (isDark) UsOpenGold else UsOpenNavy
     val cardBorderColor = if (isDark) Color(0xFF334155).copy(alpha = 0.6f) else CardBorder
+    var showInternalCopySheet by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(
+                onClick = { /* card click */ },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    if (onCopyClick != null) {
+                        onCopyClick(match)
+                    } else {
+                        showInternalCopySheet = true
+                    }
+                }
+            ),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -90,7 +122,7 @@ fun MatchCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header: Grouping, Round, Venue, Timing, Follow Button & Status Badge
+            // Header: Grouping, Round, Venue, Timing, Copy, Follow Button & Status Badge
             val courtInfo = match.displayCourt
             val headerSubtext = buildString {
                 append(match.eventGrouping)
@@ -113,7 +145,7 @@ fun MatchCard(
                     text = headerSubtext,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
@@ -122,110 +154,158 @@ fun MatchCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (onFollowClick != null) {
-                        val followBg = if (isFollowed) {
-                            if (isDark) UsOpenGold.copy(alpha = 0.2f) else UsOpenGold.copy(alpha = 0.15f)
-                        } else {
-                            Color.Transparent
+                    // Copy / Share Button Pill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            .combinedClickable(
+                                onClick = {
+                                    if (onCopyClick != null) {
+                                        onCopyClick(match)
+                                    } else {
+                                        showInternalCopySheet = true
+                                    }
+                                },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    ClipboardHelper.copyToClipboard(
+                                        context = context,
+                                        label = "Match Summary",
+                                        text = CopyTextFormatter.formatMatchSummary(match),
+                                        toastMessage = "Copied match summary"
+                                    )
+                                }
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy or share match",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Copy",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                            )
                         }
-                        val followBorder = if (isFollowed) UsOpenGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                        val followColor = if (isFollowed) UsOpenGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    }
 
+                        if (onFollowClick != null) {
+                            DisableSelection {
+                                val followBg = if (isFollowed) {
+                                    if (isDark) UsOpenGold.copy(alpha = 0.2f) else UsOpenGold.copy(alpha = 0.15f)
+                                } else {
+                                    Color.Transparent
+                                }
+                                val followBorder = if (isFollowed) UsOpenGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                val followColor = if (isFollowed) UsOpenGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(followBg)
+                                        .border(1.dp, followBorder, RoundedCornerShape(12.dp))
+                                        .clickable { onFollowClick(match) }
+                                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (isFollowed) Icons.Default.Star else Icons.Default.StarBorder,
+                                            contentDescription = if (isFollowed) "Following" else "Follow",
+                                            tint = followColor,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = if (isFollowed) "Following" else "Follow",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = followColor
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        MatchStatusBadge(match = match)
+                    }
+                }
+
+                // Court / Stadium Badge (e.g. Arthur Ashe Stadium, Louis Armstrong Stadium, Court 7)
+                if (courtInfo != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(followBg)
-                                .border(1.dp, followBorder, RoundedCornerShape(12.dp))
-                                .clickable { onFollowClick(match) }
-                                .padding(horizontal = 7.dp, vertical = 3.dp),
-                            contentAlignment = Alignment.Center
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    when {
+                                        courtInfo.contains("Ashe", ignoreCase = true) ->
+                                            if (isDark) UsOpenGold.copy(alpha = 0.18f) else UsOpenNavy.copy(alpha = 0.08f)
+                                        courtInfo.contains("Armstrong", ignoreCase = true) ->
+                                            if (isDark) UsOpenCourtBlue.copy(alpha = 0.22f) else UsOpenCourtBlue.copy(alpha = 0.10f)
+                                        courtInfo.contains("Grandstand", ignoreCase = true) ->
+                                            if (isDark) UsOpenTennisGreen.copy(alpha = 0.22f) else UsOpenTennisGreen.copy(alpha = 0.10f)
+                                        else ->
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                                    }
+                                )
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (isFollowed) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = if (isFollowed) "Following" else "Follow",
-                                    tint = followColor,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (isFollowed) "Following" else "Follow",
+                                    text = "🏟️",
+                                    fontSize = 10.sp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = courtInfo,
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = followColor
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isDark) UsOpenGold else UsOpenNavy
                                 )
                             }
                         }
                     }
-
-                    MatchStatusBadge(match = match)
                 }
-            }
 
-            // Court / Stadium Badge (e.g. Arthur Ashe Stadium, Louis Armstrong Stadium, Court 7)
-            if (courtInfo != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                when {
-                                    courtInfo.contains("Ashe", ignoreCase = true) ->
-                                        if (isDark) UsOpenGold.copy(alpha = 0.18f) else UsOpenNavy.copy(alpha = 0.08f)
-                                    courtInfo.contains("Armstrong", ignoreCase = true) ->
-                                        if (isDark) UsOpenCourtBlue.copy(alpha = 0.22f) else UsOpenCourtBlue.copy(alpha = 0.10f)
-                                    courtInfo.contains("Grandstand", ignoreCase = true) ->
-                                        if (isDark) UsOpenTennisGreen.copy(alpha = 0.22f) else UsOpenTennisGreen.copy(alpha = 0.10f)
-                                    else ->
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                                }
-                            )
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Player 1 Row
+                CompetitorRow(
+                    competitor = match.player1,
+                    opponent = match.player2,
+                    isLive = match.state == MatchState.LIVE
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Player 2 Row
+                CompetitorRow(
+                    competitor = match.player2,
+                    opponent = match.player1,
+                    isLive = match.state == MatchState.LIVE
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Action Buttons: H2H + Stats (on demand) + Watch on ESPN + Highlights (completed matches)
+                val isFinished = match.state == MatchState.FINISHED
+                DisableSelection {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "🏟️",
-                                fontSize = 10.sp
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = courtInfo,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isDark) UsOpenGold else UsOpenNavy
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Player 1 Row
-            CompetitorRow(
-                competitor = match.player1,
-                opponent = match.player2,
-                isLive = match.state == MatchState.LIVE
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Player 2 Row
-            CompetitorRow(
-                competitor = match.player2,
-                opponent = match.player1,
-                isLive = match.state == MatchState.LIVE
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Action Buttons: H2H + Stats (on demand) + Watch on ESPN + Highlights (completed matches)
-            val isFinished = match.state == MatchState.FINISHED
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
                 if (onH2HClick != null) {
                     OutlinedButton(
                         onClick = { onH2HClick(match) },
@@ -332,9 +412,17 @@ fun MatchCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                    }
                 }
             }
         }
+    }
+
+    if (showInternalCopySheet) {
+        MatchCopyBottomSheet(
+            match = match,
+            onDismiss = { showInternalCopySheet = false }
+        )
     }
 }
 
@@ -386,6 +474,7 @@ private fun isValidTennisScore(score: String?): Boolean {
         (trimmed.all { it.isDigit() } && (trimmed.toIntOrNull() ?: -1) in 0..99)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CompetitorRow(
     competitor: Competitor,
@@ -393,6 +482,8 @@ private fun CompetitorRow(
     isLive: Boolean
 ) {
     val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -400,7 +491,28 @@ private fun CompetitorRow(
     ) {
         // Player Name, Serve Indicator, Seed & Winner Checkmark
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .combinedClickable(
+                    onClick = {
+                        Toast.makeText(
+                            context,
+                            "${competitor.displayNameWithSeed} (Hold to copy name)",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        ClipboardHelper.copyToClipboard(
+                            context = context,
+                            label = "Player Name",
+                            text = competitor.name,
+                            toastMessage = "Copied '${competitor.name}'"
+                        )
+                    }
+                )
+                .padding(vertical = 3.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Service Indicator (tennis ball icon) for active server during live matches
@@ -436,7 +548,23 @@ private fun CompetitorRow(
         // Set scores and Tiebreaks
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .combinedClickable(
+                    onClick = { /* score tap */ },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val setStr = competitor.setScores.joinToString(" ")
+                        ClipboardHelper.copyToClipboard(
+                            context = context,
+                            label = "Set Scores",
+                            text = setStr,
+                            toastMessage = "Copied scores: $setStr"
+                        )
+                    }
+                )
+                .padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
             for (i in competitor.setScores.indices) {
                 val score = competitor.setScores[i]

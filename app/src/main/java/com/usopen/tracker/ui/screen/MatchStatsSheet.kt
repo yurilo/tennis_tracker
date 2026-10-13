@@ -27,11 +27,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +59,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +79,8 @@ import com.usopen.tracker.ui.theme.UsOpenNavy
 import com.usopen.tracker.ui.theme.UsOpenNavyDark
 import com.usopen.tracker.ui.theme.TennisVoltYellow
 import com.usopen.tracker.ui.viewmodel.MatchStatsUiState
+import com.usopen.tracker.util.ClipboardHelper
+import com.usopen.tracker.util.CopyTextFormatter
 
 private data class StatsColors(
     val player1Color: Color,
@@ -104,6 +114,11 @@ fun MatchStatsSheet(
         dividerColor = if (isDark) Color(0xFF334155) else CardBorder
     )
 
+    val activePeriod = statsState.stats?.periods?.let { periods ->
+        val selectedIndex = statsState.selectedPeriodIndex.coerceIn(0, (periods.size - 1).coerceAtLeast(0))
+        periods.getOrNull(selectedIndex)
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -116,9 +131,10 @@ fun MatchStatsSheet(
                 .fillMaxWidth()
                 .padding(bottom = 32.dp)
         ) {
-            // Sheet Header with Match Title and Dismiss Button
+            // Sheet Header with Match Title, Copy Stats, Refresh, and Dismiss Button
             StatsSheetHeader(
                 match = match,
+                activePeriod = activePeriod,
                 onDismiss = onDismiss,
                 onRefresh = onRefresh,
                 isLoading = statsState.isLoading,
@@ -160,7 +176,6 @@ fun MatchStatsSheet(
                         )
                     }
 
-                    val activePeriod = periods.getOrNull(selectedIndex)
                     if (activePeriod != null) {
                         PeriodStatsContent(
                             period = activePeriod,
@@ -177,72 +192,110 @@ fun MatchStatsSheet(
 @Composable
 private fun StatsSheetHeader(
     match: Match,
+    activePeriod: PeriodStats? = null,
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     isLoading: Boolean,
     colors: StatsColors,
     onH2HClick: ((Match) -> Unit)? = null
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "MATCH STATS",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    letterSpacing = 1.sp,
-                    color = colors.headerTitleColor
-                )
-                if (match.state == MatchState.LIVE) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(LiveIndicatorRed, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "LIVE",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onRefresh, enabled = !isLoading) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = colors.headerTitleColor
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh Stats",
-                            tint = colors.headerTitleColor
-                        )
+    SelectionContainer {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "MATCH STATS",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        letterSpacing = 1.sp,
+                        color = colors.headerTitleColor
+                    )
+                    if (match.state == MatchState.LIVE) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(LiveIndicatorRed, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "LIVE",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+
+                DisableSelection {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                ClipboardHelper.copyToClipboard(
+                                    context = context,
+                                    label = "Match Stats",
+                                    text = CopyTextFormatter.formatMatchStats(match, activePeriod),
+                                    toastMessage = "Copied match statistics"
+                                )
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Match Statistics",
+                                tint = colors.headerTitleColor
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                val text = CopyTextFormatter.formatMatchStats(match, activePeriod)
+                                val title = "${match.eventGrouping} Match Statistics"
+                                ClipboardHelper.shareText(context = context, title = title, text = text)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share Match Statistics",
+                                tint = colors.headerTitleColor
+                            )
+                        }
+                        IconButton(onClick = onRefresh, enabled = !isLoading) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = colors.headerTitleColor
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Stats",
+                                    tint = colors.headerTitleColor
+                                )
+                            }
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
-        }
 
         val courtText = match.displayCourt ?: match.venue.takeIf { !it.equals("New York, USA", ignoreCase = true) }
         val venueSubtext = buildString {
@@ -651,6 +704,7 @@ private fun StatsSheetHeader(
                 }
             }
         }
+        }
     }
 }
 
@@ -707,159 +761,161 @@ private fun PeriodStatsContent(
 ) {
     val scrollState = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        // Overview Comparison Bars (Key Highlights)
-        val keyStats = listOfNotNull(
-            (period.findItem("Service", "1st Serve Percentage")
-                ?: period.findItem("Service", "1st serve %")
-                ?: period.findItem("Service", "First serve"))?.let {
-                    if (it.name != "1st Serve Percentage") it.copy(name = "1st Serve Percentage") else it
-                },
-            (period.findItem("Winners", "Total Winners")
-                ?: period.findItem("Winners", "Total")
-                ?: period.findItem("Service", "Aces"))?.let {
-                    if (it.name == "Total") it.copy(name = "Total Winners") else it
-                },
-            (period.findItem("Unforced Errors", "Total Unforced Errors")
-                ?: period.findItem("Unforced errors", "Total")
-                ?: period.findItem("Service", "Double faults"))?.let {
-                    if (it.name == "Total") it.copy(name = "Total Unforced Errors") else it
-                },
-            (period.findItem("Return", "Break Points Converted")
-                ?: period.findItem("Return", "Break points converted")
-                ?: period.findItem("Return", "Break points won"))?.let {
-                    if (it.name != "Break Points Converted") it.copy(name = "Break Points Converted") else it
-                },
-            (period.findItem("Points", "Total Points Won")
-                ?: period.findItem("Points", "Total")
-                ?: period.findItem("Points", "Total points"))?.let {
-                    if (it.name != "Total Points Won") it.copy(name = "Total Points Won") else it
-                }
-        )
-
-        if (keyStats.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.dividerColor)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    val context = LocalContext.current
-                    val p1Tour = TennisProfileProvider.resolveTour(match.player1, match)
-                    val p2Tour = TennisProfileProvider.resolveTour(match.player2, match)
-                    var selectedKeyDoublesCompetitor by remember { mutableStateOf<Competitor?>(null) }
-
-                    if (selectedKeyDoublesCompetitor != null) {
-                        DoublesProfilePickerDialog(
-                            competitor = selectedKeyDoublesCompetitor!!,
-                            match = match,
-                            onDismiss = { selectedKeyDoublesCompetitor = null }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            PlayerAvatar(
-                                competitor = match.player1,
-                                size = if (match.player1.isDoubles) 30.dp else 26.dp,
-                                accentColor = colors.player1Color,
-                                showBadges = false,
-                                onClick = {
-                                    if (match.player1.isDoubles) {
-                                        selectedKeyDoublesCompetitor = match.player1
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "Opening ${match.player1.name} ${p1Tour.displayName} Profile...",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        IntentLauncher.launchPlayerProfile(context, match.player1, match)
-                                    }
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = match.player1.lastNameOrShortName,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = colors.player1Color
-                            )
-                        }
-
-                        Text(
-                            text = "KEY COMPARISONS",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 11.sp,
-                            letterSpacing = 1.sp,
-                            color = colors.headerTitleColor.copy(alpha = 0.85f)
-                        )
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = match.player2.lastNameOrShortName,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = colors.player2Color
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            PlayerAvatar(
-                                competitor = match.player2,
-                                size = if (match.player2.isDoubles) 30.dp else 26.dp,
-                                accentColor = colors.player2Color,
-                                showBadges = false,
-                                onClick = {
-                                    if (match.player2.isDoubles) {
-                                        selectedKeyDoublesCompetitor = match.player2
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "Opening ${match.player2.name} ${p2Tour.displayName} Profile...",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        IntentLauncher.launchPlayerProfile(context, match.player2, match)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    keyStats.forEach { stat ->
-                        StatComparisonRow(stat = stat, colors = colors)
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Granular Breakdown Groups
-        period.groups.forEach { group ->
-            StatGroupCard(group = group, colors = colors)
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // Data source footnote
-        Text(
-            text = "Official live analytics powered by Tennis Tracker & Sofascore",
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            textAlign = TextAlign.Center,
+    SelectionContainer {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp)
-        )
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            // Overview Comparison Bars (Key Highlights)
+            val keyStats = listOfNotNull(
+                (period.findItem("Service", "1st Serve Percentage")
+                    ?: period.findItem("Service", "1st serve %")
+                    ?: period.findItem("Service", "First serve"))?.let {
+                        if (it.name != "1st Serve Percentage") it.copy(name = "1st Serve Percentage") else it
+                    },
+                (period.findItem("Winners", "Total Winners")
+                    ?: period.findItem("Winners", "Total")
+                    ?: period.findItem("Service", "Aces"))?.let {
+                        if (it.name == "Total") it.copy(name = "Total Winners") else it
+                    },
+                (period.findItem("Unforced Errors", "Total Unforced Errors")
+                    ?: period.findItem("Unforced errors", "Total")
+                    ?: period.findItem("Service", "Double faults"))?.let {
+                        if (it.name == "Total") it.copy(name = "Total Unforced Errors") else it
+                    },
+                (period.findItem("Return", "Break Points Converted")
+                    ?: period.findItem("Return", "Break points converted")
+                    ?: period.findItem("Return", "Break points won"))?.let {
+                        if (it.name != "Break Points Converted") it.copy(name = "Break Points Converted") else it
+                    },
+                (period.findItem("Points", "Total Points Won")
+                    ?: period.findItem("Points", "Total")
+                    ?: period.findItem("Points", "Total points"))?.let {
+                        if (it.name != "Total Points Won") it.copy(name = "Total Points Won") else it
+                    }
+            )
+
+            if (keyStats.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, colors.dividerColor)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        val context = LocalContext.current
+                        val p1Tour = TennisProfileProvider.resolveTour(match.player1, match)
+                        val p2Tour = TennisProfileProvider.resolveTour(match.player2, match)
+                        var selectedKeyDoublesCompetitor by remember { mutableStateOf<Competitor?>(null) }
+
+                        if (selectedKeyDoublesCompetitor != null) {
+                            DoublesProfilePickerDialog(
+                                competitor = selectedKeyDoublesCompetitor!!,
+                                match = match,
+                                onDismiss = { selectedKeyDoublesCompetitor = null }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                PlayerAvatar(
+                                    competitor = match.player1,
+                                    size = if (match.player1.isDoubles) 30.dp else 26.dp,
+                                    accentColor = colors.player1Color,
+                                    showBadges = false,
+                                    onClick = {
+                                        if (match.player1.isDoubles) {
+                                            selectedKeyDoublesCompetitor = match.player1
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "Opening ${match.player1.name} ${p1Tour.displayName} Profile...",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            IntentLauncher.launchPlayerProfile(context, match.player1, match)
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = match.player1.lastNameOrShortName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = colors.player1Color
+                                )
+                            }
+
+                            Text(
+                                text = "KEY COMPARISONS",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                letterSpacing = 1.sp,
+                                color = colors.headerTitleColor.copy(alpha = 0.85f)
+                            )
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = match.player2.lastNameOrShortName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = colors.player2Color
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                PlayerAvatar(
+                                    competitor = match.player2,
+                                    size = if (match.player2.isDoubles) 30.dp else 26.dp,
+                                    accentColor = colors.player2Color,
+                                    showBadges = false,
+                                    onClick = {
+                                        if (match.player2.isDoubles) {
+                                            selectedKeyDoublesCompetitor = match.player2
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "Opening ${match.player2.name} ${p2Tour.displayName} Profile...",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            IntentLauncher.launchPlayerProfile(context, match.player2, match)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        keyStats.forEach { stat ->
+                            StatComparisonRow(stat = stat, colors = colors)
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Granular Breakdown Groups
+            period.groups.forEach { group ->
+                StatGroupCard(group = group, colors = colors)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Data source footnote
+            Text(
+                text = "Official live analytics powered by Tennis Tracker & Sofascore",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+            )
+        }
     }
 }
 
@@ -921,15 +977,33 @@ private fun StatGroupCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StatItemRow(
     item: StatItem,
     colors: StatsColors
 ) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClick = { /* stat tap */ },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val text = "${item.name}: ${item.homeDisplay} — ${item.awayDisplay}"
+                    ClipboardHelper.copyToClipboard(
+                        context = context,
+                        label = item.name,
+                        text = text,
+                        toastMessage = "Copied '${item.name}'"
+                    )
+                }
+            )
+            .padding(vertical = 4.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -964,12 +1038,34 @@ private fun StatItemRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StatComparisonRow(
     stat: StatItem,
     colors: StatsColors
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClick = { /* stat tap */ },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val text = "${stat.name}: ${stat.homeDisplay} — ${stat.awayDisplay}"
+                    ClipboardHelper.copyToClipboard(
+                        context = context,
+                        label = stat.name,
+                        text = text,
+                        toastMessage = "Copied '${stat.name}'"
+                    )
+                }
+            )
+            .padding(vertical = 2.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
