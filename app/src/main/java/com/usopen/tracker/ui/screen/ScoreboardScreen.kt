@@ -64,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.usopen.tracker.domain.model.DeepLink
+import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
 import com.usopen.tracker.ui.theme.EspnRed
 import com.usopen.tracker.ui.theme.UsOpenGold
@@ -91,6 +92,7 @@ fun ScoreboardScreen(
 
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
+    var selectedMatchForCopy by remember { mutableStateOf<Match?>(null) }
 
     val packageInfo = remember(context) {
         try {
@@ -430,12 +432,24 @@ fun ScoreboardScreen(
                             },
                             onH2HClick = { matchToInspect ->
                                 viewModel.openH2H(matchToInspect)
+                            },
+                            onCopyClick = { matchToCopy ->
+                                selectedMatchForCopy = matchToCopy
                             }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Modal Bottom Sheet for Copy & Sharing (shown on-demand)
+    val matchForCopy = selectedMatchForCopy
+    if (matchForCopy != null) {
+        MatchCopyBottomSheet(
+            match = matchForCopy,
+            onDismiss = { selectedMatchForCopy = null }
+        )
     }
 
     // Modal Bottom Sheet for Live Statistics (shown on-demand only)
@@ -499,92 +513,96 @@ fun ScoreboardScreen(
                 }
             },
             text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9))
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9))
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Text(
-                                text = "App Version",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "v$appVersion (Build $appBuild)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isDark) UsOpenGold else UsOpenNavy
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Global Tennis Tournament Companion",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "• 🏆 All Tournaments: Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) & ATP/WTA Tours\n• 🎾 Live Serving Ball indicator beside active server\n• ⚡ Point-by-point live game scores (0, 15, 30, 40, Adv, TB)\n• 📊 On-demand Head-to-Head (H2H) & Match Statistics\n• 👥 Singles & Doubles with official ATP and WTA player profiles\n• 📱 Desktop Watchlist Widget with 1-min live sync\n• 📺 Direct ESPN Watch & Replay stream launching\n• ▶️ Official YouTube Match Highlights for completed matches",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                        lineHeight = 18.sp
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                viewModel.updateTelemetryEnabled(!settings.telemetryEnabled)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "App Version",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "v$appVersion (Build $appBuild)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDark) UsOpenGold else UsOpenNavy
+                                )
                             }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "📊 Anonymous Active Telemetry",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Counts active users for dashboard. Zero personal data collected.",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                lineHeight = 15.sp
-                            )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = settings.telemetryEnabled,
-                            onCheckedChange = {
-                                viewModel.updateTelemetryEnabled(it)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = UsOpenNavy,
-                                checkedTrackColor = UsOpenGold
-                            )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Global Tennis Tournament Companion",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "• 🏆 All Tournaments: Grand Slams (US Open, Australian Open, Roland Garros, Wimbledon) & ATP/WTA Tours\n• 🎾 Live Serving Ball indicator beside active server\n• ⚡ Point-by-point live game scores (0, 15, 30, 40, Adv, TB)\n• 📊 On-demand Head-to-Head (H2H) & Match Statistics\n• 👥 Singles & Doubles with official ATP and WTA player profiles\n• 📱 Desktop Watchlist Widget with 1-min live sync\n• 📺 Direct ESPN Watch & Replay stream launching\n• ▶️ Official YouTube Match Highlights for completed matches",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                            lineHeight = 18.sp
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                        androidx.compose.foundation.text.selection.DisableSelection {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        viewModel.updateTelemetryEnabled(!settings.telemetryEnabled)
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "📊 Anonymous Active Telemetry",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Counts active users for dashboard. Zero personal data collected.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Switch(
+                                    checked = settings.telemetryEnabled,
+                                    onCheckedChange = {
+                                        viewModel.updateTelemetryEnabled(it)
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = UsOpenNavy,
+                                        checkedTrackColor = UsOpenGold
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             },

@@ -30,12 +30,18 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,6 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +73,8 @@ import com.usopen.tracker.ui.component.PlayerAvatar
 import com.usopen.tracker.ui.theme.UsOpenCourtBlue
 import com.usopen.tracker.ui.theme.UsOpenGold
 import com.usopen.tracker.ui.theme.UsOpenNavy
+import com.usopen.tracker.util.ClipboardHelper
+import com.usopen.tracker.util.CopyTextFormatter
 
 private data class H2HColors(
     val player1Color: Color,
@@ -112,6 +122,8 @@ fun H2HBottomSheet(
             // Header
             H2HHeader(
                 match = match,
+                summary = uiState.summary,
+                selectedSurface = uiState.selectedSurface,
                 onDismiss = onDismiss,
                 onRefresh = onRefresh,
                 isLoading = uiState.isLoading,
@@ -147,37 +159,41 @@ fun H2HBottomSheet(
                 }
 
                 uiState.errorMessage != null && uiState.summary == null -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(260.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
+                    SelectionContainer {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No Head-to-Head Records Available",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = uiState.errorMessage,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            androidx.compose.material3.Button(
-                                onClick = onRefresh,
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                    containerColor = colors.headerTitleColor,
-                                    contentColor = if (isDark) UsOpenNavy else Color.White
-                                )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
                             ) {
-                                Text("Retry")
+                                Text(
+                                    text = "No Head-to-Head Records Available",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = uiState.errorMessage,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                DisableSelection {
+                                    androidx.compose.material3.Button(
+                                        onClick = onRefresh,
+                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            containerColor = colors.headerTitleColor,
+                                            contentColor = if (isDark) UsOpenNavy else Color.White
+                                        )
+                                    ) {
+                                        Text("Retry")
+                                    }
+                                }
                             }
                         }
                     }
@@ -221,27 +237,29 @@ fun H2HBottomSheet(
 
                         // 4. Section Title
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (uiState.selectedSurface != null) {
-                                        "${uiState.selectedSurface.displayName.uppercase()} ENCOUNTERS (${filteredMatches.size})"
-                                    } else {
-                                        "MATCH TIMELINE (${filteredMatches.size})"
-                                    },
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 11.sp,
-                                    letterSpacing = 1.sp,
-                                    color = colors.headerTitleColor.copy(alpha = 0.85f)
-                                )
-                                Text(
-                                    text = "Most recent first",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                            SelectionContainer {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (uiState.selectedSurface != null) {
+                                            "${uiState.selectedSurface.displayName.uppercase()} ENCOUNTERS (${filteredMatches.size})"
+                                        } else {
+                                            "MATCH TIMELINE (${filteredMatches.size})"
+                                        },
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 11.sp,
+                                        letterSpacing = 1.sp,
+                                        color = colors.headerTitleColor.copy(alpha = 0.85f)
+                                    )
+                                    Text(
+                                        text = "Most recent first",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
                             }
                         }
 
@@ -295,77 +313,117 @@ fun H2HBottomSheet(
 @Composable
 private fun H2HHeader(
     match: Match,
+    summary: H2HSummary? = null,
+    selectedSurface: CourtSurface? = null,
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     isLoading: Boolean,
     colors: H2HColors
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "HEAD-TO-HEAD",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 15.sp,
-                    letterSpacing = 1.sp,
-                    color = colors.headerTitleColor
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(colors.cardBorderColor)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "H2H",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.headerTitleColor
-                    )
-                }
-            }
-            val courtText = match.displayCourt ?: match.venue.takeIf { !it.equals("New York, USA", ignoreCase = true) }
-            val h2hSubtext = if (!courtText.isNullOrBlank()) {
-                "${match.eventGrouping} • $courtText • Career Rivalry History"
-            } else {
-                "${match.eventGrouping} • Career Rivalry History"
-            }
-            Text(
-                text = h2hSubtext,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-            )
-        }
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onRefresh, enabled = !isLoading) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
+    SelectionContainer {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "HEAD-TO-HEAD",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.sp,
                         color = colors.headerTitleColor
                     )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh H2H",
-                        tint = colors.headerTitleColor
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(colors.cardBorderColor)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "H2H",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.headerTitleColor
+                        )
+                    }
                 }
-            }
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = MaterialTheme.colorScheme.onSurface
+                val courtText = match.displayCourt ?: match.venue.takeIf { !it.equals("New York, USA", ignoreCase = true) }
+                val h2hSubtext = if (!courtText.isNullOrBlank()) {
+                    "${match.eventGrouping} • $courtText • Career Rivalry History"
+                } else {
+                    "${match.eventGrouping} • Career Rivalry History"
+                }
+                Text(
+                    text = h2hSubtext,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                 )
+            }
+
+            DisableSelection {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            ClipboardHelper.copyToClipboard(
+                                context = context,
+                                label = "H2H Summary",
+                                text = CopyTextFormatter.formatH2HSummary(match, summary, selectedSurface),
+                                toastMessage = "Copied Head-to-Head summary"
+                            )
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy Head-to-Head Summary",
+                            tint = colors.headerTitleColor
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            val text = CopyTextFormatter.formatH2HSummary(match, summary, selectedSurface)
+                            val title = "Head-to-Head: ${match.player1.name} vs ${match.player2.name}"
+                            ClipboardHelper.shareText(context = context, title = title, text = text)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share Head-to-Head Summary",
+                            tint = colors.headerTitleColor
+                        )
+                    }
+                    IconButton(onClick = onRefresh, enabled = !isLoading) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.headerTitleColor
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh H2H",
+                                tint = colors.headerTitleColor
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
     }
@@ -397,17 +455,18 @@ private fun TaleOfTheTapeCard(
         colors = CardDefaults.cardColors(containerColor = colors.cardBgColor),
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.cardBorderColor)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        SelectionContainer {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 // Player 1 Side
                 Column(
                     modifier = Modifier.weight(1f),
@@ -653,6 +712,7 @@ private fun TaleOfTheTapeCard(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                 )
             }
+            }
         }
     }
 }
@@ -663,42 +723,44 @@ private fun SurfaceBreakdownRow(
     colors: H2HColors,
     isDark: Boolean
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        SurfaceStatCard(
-            label = "Hard",
-            icon = "🟦",
-            p1Score = summary.hardWinsP1,
-            p2Score = summary.hardWinsP2,
-            colors = colors,
-            modifier = Modifier.weight(1f)
-        )
-        SurfaceStatCard(
-            label = "Clay",
-            icon = "🟧",
-            p1Score = summary.clayWinsP1,
-            p2Score = summary.clayWinsP2,
-            colors = colors,
-            modifier = Modifier.weight(1f)
-        )
-        SurfaceStatCard(
-            label = "Grass",
-            icon = "🟩",
-            p1Score = summary.grassWinsP1,
-            p2Score = summary.grassWinsP2,
-            colors = colors,
-            modifier = Modifier.weight(1f)
-        )
-        SurfaceStatCard(
-            label = "Majors",
-            icon = "🏆",
-            p1Score = summary.grandSlamWinsP1,
-            p2Score = summary.grandSlamWinsP2,
-            colors = colors,
-            modifier = Modifier.weight(1f)
-        )
+    SelectionContainer {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SurfaceStatCard(
+                label = "Hard",
+                icon = "🟦",
+                p1Score = summary.hardWinsP1,
+                p2Score = summary.hardWinsP2,
+                colors = colors,
+                modifier = Modifier.weight(1f)
+            )
+            SurfaceStatCard(
+                label = "Clay",
+                icon = "🟧",
+                p1Score = summary.clayWinsP1,
+                p2Score = summary.clayWinsP2,
+                colors = colors,
+                modifier = Modifier.weight(1f)
+            )
+            SurfaceStatCard(
+                label = "Grass",
+                icon = "🟩",
+                p1Score = summary.grassWinsP1,
+                p2Score = summary.grassWinsP2,
+                colors = colors,
+                modifier = Modifier.weight(1f)
+            )
+            SurfaceStatCard(
+                label = "Majors",
+                icon = "🏆",
+                p1Score = summary.grandSlamWinsP1,
+                p2Score = summary.grandSlamWinsP2,
+                colors = colors,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
@@ -823,6 +885,7 @@ private fun SurfaceFilterChip(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoricalMatchCard(
     match: HistoricalMatch,
@@ -831,6 +894,8 @@ private fun HistoricalMatchCard(
     colors: H2HColors,
     isDark: Boolean
 ) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val isP1Winner = match.isWinner(p1Name)
     val cardBorder = if (match.isCurrentMatch) {
         androidx.compose.foundation.BorderStroke(1.5.dp, UsOpenGold)
@@ -839,157 +904,200 @@ private fun HistoricalMatchCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = { /* card click */ },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    ClipboardHelper.copyToClipboard(
+                        context = context,
+                        label = "Historical Match",
+                        text = CopyTextFormatter.formatHistoricalMatch(match),
+                        toastMessage = "Copied historical match result"
+                    )
+                }
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBgColor),
         border = cardBorder
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-        ) {
-            // Current Match Banner
-            if (match.isCurrentMatch) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(UsOpenGold.copy(alpha = 0.18f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.EmojiEvents,
-                        contentDescription = null,
-                        tint = UsOpenGold,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "CURRENT MATCH • ${match.tournamentName.ifEmpty { "TENNIS" }.uppercase()}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = colors.headerTitleColor
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // Top Row: Date, Surface Chip & Duration
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        SelectionContainer {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp)
             ) {
-                Text(
-                    text = "${match.round} • ${match.year}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = colors.headerTitleColor
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Court Surface Badge
-                    Box(
+                // Current Match Banner
+                if (match.isCurrentMatch) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(6.dp))
-                            .background(match.surface.color.copy(alpha = 0.2f))
-                            .border(1.dp, match.surface.color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                            .background(UsOpenGold.copy(alpha = 0.18f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = UsOpenGold,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${match.surface.icon} ${match.surface.displayName}",
+                            text = "CURRENT MATCH • ${match.tournamentName.ifEmpty { "TENNIS" }.uppercase()}",
+                            fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = match.surface.color
+                            color = colors.headerTitleColor
                         )
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-                    if (match.matchDuration != null) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
+                // Top Row: Date, Surface Chip, Duration & Copy Icon
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${match.round} • ${match.year}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = colors.headerTitleColor
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Court Surface Badge
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(match.surface.color.copy(alpha = 0.2f))
+                                .border(1.dp, match.surface.color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
                             Text(
-                                text = match.matchDuration,
+                                text = "${match.surface.icon} ${match.surface.displayName}",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                fontWeight = FontWeight.SemiBold,
+                                color = match.surface.color
                             )
+                        }
+
+                        if (match.matchDuration != null) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = match.matchDuration,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+                        DisableSelection {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        ClipboardHelper.copyToClipboard(
+                                            context = context,
+                                            label = "Historical Match",
+                                            text = CopyTextFormatter.formatHistoricalMatch(match),
+                                            toastMessage = "Copied historical match result"
+                                        )
+                                    }
+                                    .padding(horizontal = 5.dp, vertical = 3.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy Historical Match Result",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-            // Tournament Name & Venue
-            Text(
-                text = match.tournamentName,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(vertical = 2.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
+                // Tournament Name & Venue
                 Text(
-                    text = if (match.city != null) "${match.venue}, ${match.city}" else match.venue,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Match Scores Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Winner: ",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    Text(
-                        text = match.winnerName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = if (isP1Winner) colors.player1Color else colors.player2Color
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "🏆", fontSize = 12.sp)
-                }
-
-                Text(
-                    text = match.score,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
+                    text = match.tournamentName,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = if (match.city != null) "${match.venue}, ${match.city}" else match.venue,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Match Scores Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Winner: ",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = match.winnerName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (isP1Winner) colors.player1Color else colors.player2Color
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "🏆", fontSize = 12.sp)
+                    }
+
+                    Text(
+                        text = match.score,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
