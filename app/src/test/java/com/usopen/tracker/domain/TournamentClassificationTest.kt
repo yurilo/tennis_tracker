@@ -426,7 +426,7 @@ class TournamentClassificationTest {
         assertEquals("Dubai", Tournaments.DUBAI_CHAMPIONSHIPS.shortDisplayName)
         assertEquals("Queen's", Tournaments.QUEENS_CLUB.shortDisplayName)
         assertEquals("Monte-Carlo", Tournaments.MONTE_CARLO_MASTERS.shortDisplayName)
-        assertEquals("Shanghai", Tournaments.SHANGHAI_MASTERS.shortDisplayName)
+        assertEquals("Shanghai Open", Tournaments.SHANGHAI_MASTERS.shortDisplayName)
         assertEquals("Paris", Tournaments.PARIS_MASTERS.shortDisplayName)
         assertEquals("Eastbourne", Tournaments.EASTBOURNE_INTERNATIONAL.shortDisplayName)
         assertEquals("Brisbane", Tournaments.BRISBANE_INTERNATIONAL.shortDisplayName)
@@ -476,6 +476,43 @@ class TournamentClassificationTest {
         assertTrue(dubai.matches("Dubai Open"))
         assertTrue(dubai.matches("Dubai Tennis Championships"))
         assertTrue(dubai.matches("Dubai Duty Free Tennis Championships"))
+    }
+
+    @Test
+    fun testTournament_shanghaiOpenResolutionAndAliases() {
+        val shanghai = Tournaments.SHANGHAI_MASTERS
+        assertEquals("shanghai_masters", shanghai.id)
+        assertEquals("Shanghai Open", shanghai.displayName)
+        assertEquals("Shanghai Open", shanghai.shortDisplayName)
+        assertSame(Tournaments.SHANGHAI_MASTERS, Tournaments.SHANGHAI_OPEN)
+
+        // Matching against all variants
+        assertTrue(shanghai.matches("Shanghai Open"))
+        assertTrue(shanghai.matches("Rolex Shanghai Masters"))
+        assertTrue(shanghai.matches("Shanghai Masters"))
+        assertTrue(shanghai.matches("Shanghai"))
+        assertTrue(shanghai.matches("Rolex Shanghai Open"))
+
+        // TournamentResolver canonical resolution
+        val resolvedFromFeed = TournamentResolver.resolve("Rolex Shanghai Masters", "Men's Singles")
+        assertEquals("shanghai_masters", resolvedFromFeed.id)
+        assertEquals("Shanghai Open", resolvedFromFeed.displayName)
+
+        val resolvedFromOpen = TournamentResolver.resolve("Shanghai Open", "Men's Singles")
+        assertEquals("shanghai_masters", resolvedFromOpen.id)
+
+        // Verify presence in popular and curated lists
+        assertTrue("Shanghai Open must be in POPULAR_TOURNAMENTS", Tournaments.POPULAR_TOURNAMENTS.any { it.id == "shanghai_masters" })
+        assertTrue("Shanghai Open must be in MASTERS_1000_LIST", Tournaments.MASTERS_1000_LIST.any { it.id == "shanghai_masters" })
+        assertTrue("Shanghai Open must be in ATP_MASTERS_1000_LIST", Tournaments.ATP_MASTERS_1000_LIST.any { it.id == "shanghai_masters" })
+        assertTrue("Shanghai Open must be in ALL_CANONICAL_TOURNAMENTS", Tournaments.ALL_CANONICAL_TOURNAMENTS.any { it.id == "shanghai_masters" })
+
+        // Verify comprehensive curated lists
+        assertEquals(9, Tournaments.ATP_MASTERS_1000_LIST.size)
+        assertEquals(10, Tournaments.WTA_1000_LIST.size)
+        assertTrue(Tournaments.WTA_500_LIST.size >= 12)
+        assertTrue(Tournaments.WTA_250_LIST.isNotEmpty())
+        assertTrue(Tournaments.ATP_500_LIST.any { it.id == "hamburg_open" })
     }
 
     private fun createMatch(

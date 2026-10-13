@@ -99,6 +99,32 @@ object MatchCacheManager {
         return loadMatches(context)
     }
 
+    const val DEFAULT_CACHE_TTL_MILLIS = 5 * 60 * 1000L // 5 minutes
+
+    /**
+     * Retrieves the epoch timestamp when matches were last persisted to storage.
+     */
+    fun getLastSavedTimestamp(context: Context?): Long {
+        val ctx = context?.applicationContext ?: return 0L
+        return try {
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getLong(KEY_LAST_SAVED_TIME, 0L)
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
+    /**
+     * Determines whether the local cache is considered fresh within the provided TTL.
+     * When context is null (in-memory unit test environment), returns true.
+     */
+    fun isCacheFresh(context: Context?, ttlMillis: Long = DEFAULT_CACHE_TTL_MILLIS): Boolean {
+        val ctx = context?.applicationContext ?: return true
+        val lastSaved = getLastSavedTimestamp(ctx)
+        if (lastSaved == 0L) return false
+        return (System.currentTimeMillis() - lastSaved) < ttlMillis
+    }
+
     /**
      * Clears in-memory and persistent cache (useful for testing or full reset).
      */

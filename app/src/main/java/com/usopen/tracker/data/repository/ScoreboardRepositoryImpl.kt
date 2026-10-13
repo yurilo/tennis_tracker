@@ -100,7 +100,7 @@ class ScoreboardRepositoryImpl(
             return loaded
         }
 
-        if (!forceRefresh) {
+        if (!forceRefresh && MatchCacheManager.isCacheFresh(appContext)) {
             val filteredCached = filterMatches(loadCached(), targetTournament)
             if (filteredCached.isNotEmpty()) {
                 return@withContext Result.success(sortMatches(filteredCached))

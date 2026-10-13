@@ -52,7 +52,7 @@ data class Tournament(
             id == "dubai_tennis_championships" -> "Dubai"
             id == "queens_club" -> "Queen's"
             id == "monte_carlo" -> "Monte-Carlo"
-            id == "shanghai_masters" -> "Shanghai"
+            id == "shanghai_masters" -> "Shanghai Open"
             id == "paris_masters" -> "Paris"
             id == "eastbourne_international" -> "Eastbourne"
             id == "brisbane_international" -> "Brisbane"
@@ -254,8 +254,8 @@ object Tournaments {
 
     val SHANGHAI_MASTERS = Tournament(
         id = "shanghai_masters",
-        displayName = "Shanghai Masters",
-        aliases = setOf("Shanghai Masters", "Rolex Shanghai Masters", "Shanghai"),
+        displayName = "Shanghai Open",
+        aliases = setOf("Shanghai Open", "Shanghai Masters", "Rolex Shanghai Masters", "Rolex Shanghai Open", "Shanghai", "Shanghai ATP", "Shanghai 1000"),
         defaultVenue = "Stadium Court",
         isGrandSlam = false,
         tour = TourType.ATP,
@@ -264,6 +264,8 @@ object Tournaments {
         city = "Shanghai",
         country = "China"
     )
+
+    val SHANGHAI_OPEN = SHANGHAI_MASTERS
 
     val PARIS_MASTERS = Tournament(
         id = "paris_masters",
@@ -440,6 +442,19 @@ object Tournaments {
         country = "Germany"
     )
 
+    val HAMBURG_OPEN = Tournament(
+        id = "hamburg_open",
+        displayName = "Hamburg Open",
+        aliases = setOf("Hamburg Open", "Hamburg European Open", "Rothenbaum", "Hamburg"),
+        defaultVenue = "Center Court Rothenbaum",
+        isGrandSlam = false,
+        tour = TourType.ATP,
+        category = TournamentCategory.ATP_500,
+        surface = CourtSurface.CLAY,
+        city = "Hamburg",
+        country = "Germany"
+    )
+
     val WASHINGTON_OPEN = Tournament(
         id = "washington_open",
         displayName = "Washington Open",
@@ -542,6 +557,123 @@ object Tournaments {
         surface = CourtSurface.HARD,
         city = "San Diego",
         country = "USA"
+    )
+
+    val ABU_DHABI_OPEN = Tournament(
+        id = "abu_dhabi_open",
+        displayName = "Abu Dhabi Open",
+        aliases = setOf("Mubadala Abu Dhabi Open", "Abu Dhabi"),
+        defaultVenue = "Zayed Sports City",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Abu Dhabi",
+        country = "UAE"
+    )
+
+    val STRASBOURG_OPEN = Tournament(
+        id = "strasbourg_open",
+        displayName = "Strasbourg Open",
+        aliases = setOf("Internationaux de Strasbourg", "Strasbourg"),
+        defaultVenue = "Tennis Club de Strasbourg",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.CLAY,
+        city = "Strasbourg",
+        country = "France"
+    )
+
+    val BAD_HOMBURG_OPEN = Tournament(
+        id = "bad_homburg_open",
+        displayName = "Bad Homburg Open",
+        aliases = setOf("Bad Homburg Open", "Bad Homburg"),
+        defaultVenue = "TC Bad Homburg",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.GRASS,
+        city = "Bad Homburg",
+        country = "Germany"
+    )
+
+    val MONTERREY_OPEN = Tournament(
+        id = "monterrey_open",
+        displayName = "Monterrey Open",
+        aliases = setOf("Abierto GNP Seguros", "Monterrey Open", "Monterrey"),
+        defaultVenue = "Club Sonoma",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Monterrey",
+        country = "Mexico"
+    )
+
+    val GUADALAJARA_OPEN = Tournament(
+        id = "guadalajara_open",
+        displayName = "Guadalajara Open",
+        aliases = setOf("Guadalajara Open Akron", "Guadalajara Open", "Guadalajara"),
+        defaultVenue = "Panamerican Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Guadalajara",
+        country = "Mexico"
+    )
+
+    val SEOUL_OPEN = Tournament(
+        id = "seoul_open",
+        displayName = "Korea Open",
+        aliases = setOf("Korea Open", "Seoul Open", "Seoul"),
+        defaultVenue = "Olympic Park Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Seoul",
+        country = "South Korea"
+    )
+
+    val NINGBO_OPEN = Tournament(
+        id = "ningbo_open",
+        displayName = "Ningbo Open",
+        aliases = setOf("Ningbo Open", "Ningbo"),
+        defaultVenue = "Yinzhou Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Ningbo",
+        country = "China"
+    )
+
+    val PAN_PACIFIC_OPEN = Tournament(
+        id = "pan_pacific_open",
+        displayName = "Pan Pacific Open",
+        aliases = setOf("Toray Pan Pacific Open", "Tokyo WTA", "Pan Pacific Open", "Pan Pacific"),
+        defaultVenue = "Ariake Coliseum",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Tokyo",
+        country = "Japan"
+    )
+
+    val ZHENGZHOU_OPEN = Tournament(
+        id = "zhengzhou_open",
+        displayName = "Zhengzhou Open",
+        aliases = setOf("Bank of Communications Zhengzhou Open", "Zhengzhou Open", "Zhengzhou"),
+        defaultVenue = "Central Plains Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_500,
+        surface = CourtSurface.HARD,
+        city = "Zhengzhou",
+        country = "China"
     )
 
     // ==========================================
@@ -755,6 +887,162 @@ object Tournaments {
         country = "Belgium"
     )
 
+    val AUCKLAND_ASB_CLASSIC = Tournament(
+        id = "auckland_asb_classic",
+        displayName = "ASB Classic",
+        aliases = setOf("ASB Classic", "Auckland WTA", "Auckland Classic"),
+        defaultVenue = "ASB Tennis Centre",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Auckland",
+        country = "New Zealand"
+    )
+
+    val HOBART_INTERNATIONAL = Tournament(
+        id = "hobart_international",
+        displayName = "Hobart International",
+        aliases = setOf("Hobart International", "Hobart"),
+        defaultVenue = "Hobart International Tennis Centre",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Hobart",
+        country = "Australia"
+    )
+
+    val THAILAND_OPEN = Tournament(
+        id = "thailand_open",
+        displayName = "Thailand Open",
+        aliases = setOf("Thailand Open", "Thailand Open Hua Hin", "Hua Hin Championships"),
+        defaultVenue = "True Arena Hua Hin",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Hua Hin",
+        country = "Thailand"
+    )
+
+    val AUSTIN_ATX_OPEN = Tournament(
+        id = "austin_atx_open",
+        displayName = "ATX Open",
+        aliases = setOf("ATX Open", "Austin Open", "Austin"),
+        defaultVenue = "Westwood Country Club",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Austin",
+        country = "USA"
+    )
+
+    val NOTTINGHAM_OPEN = Tournament(
+        id = "nottingham_open",
+        displayName = "Nottingham Open",
+        aliases = setOf("Rothesay Open Nottingham", "Nottingham Open", "Nottingham"),
+        defaultVenue = "Nottingham Tennis Centre",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.GRASS,
+        city = "Nottingham",
+        country = "United Kingdom"
+    )
+
+    val BIRMINGHAM_CLASSIC = Tournament(
+        id = "birmingham_classic",
+        displayName = "Birmingham Classic",
+        aliases = setOf("Rothesay Classic Birmingham", "Birmingham Classic", "Birmingham"),
+        defaultVenue = "Edgbaston Priory Club",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.GRASS,
+        city = "Birmingham",
+        country = "United Kingdom"
+    )
+
+    val PALERMO_OPEN = Tournament(
+        id = "palermo_open",
+        displayName = "Palermo Ladies Open",
+        aliases = setOf("Palermo Ladies Open", "Palermo Open", "Palermo"),
+        defaultVenue = "Country Time Club",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.CLAY,
+        city = "Palermo",
+        country = "Italy"
+    )
+
+    val PRAGUE_OPEN = Tournament(
+        id = "prague_open",
+        displayName = "Prague Open",
+        aliases = setOf("Livesport Prague Open", "Prague Open", "Prague"),
+        defaultVenue = "TK Sparta Praha",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.CLAY,
+        city = "Prague",
+        country = "Czech Republic"
+    )
+
+    val CLEVELAND_OPEN = Tournament(
+        id = "cleveland_open",
+        displayName = "Cleveland Open",
+        aliases = setOf("Tennis in the Land", "Cleveland Open", "Cleveland"),
+        defaultVenue = "Nautica Entertainment Complex",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Cleveland",
+        country = "USA"
+    )
+
+    val GUANGZHOU_OPEN = Tournament(
+        id = "guangzhou_open",
+        displayName = "Guangzhou Open",
+        aliases = setOf("Guangzhou Open", "Guangzhou"),
+        defaultVenue = "Nansha International Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Guangzhou",
+        country = "China"
+    )
+
+    val HONG_KONG_OPEN = Tournament(
+        id = "hong_kong_open",
+        displayName = "Hong Kong Open",
+        aliases = setOf("Prudential Hong Kong Tennis Open", "Hong Kong Open", "Hong Kong"),
+        defaultVenue = "Victoria Park Tennis Stadium",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Hong Kong",
+        country = "Hong Kong"
+    )
+
+    val JIUJIANG_OPEN = Tournament(
+        id = "jiujiang_open",
+        displayName = "Jiangxi Open",
+        aliases = setOf("Jiangxi Open", "Jiujiang Open", "Jiujiang", "Nanchang"),
+        defaultVenue = "Jiujiang International Tennis Center",
+        isGrandSlam = false,
+        tour = TourType.WTA,
+        category = TournamentCategory.WTA_250,
+        surface = CourtSurface.HARD,
+        city = "Jiujiang",
+        country = "China"
+    )
+
     // ==========================================
     // Curated Lists
     // ==========================================
@@ -763,6 +1051,31 @@ object Tournaments {
         AUSTRALIAN_OPEN,
         ROLAND_GARROS,
         WIMBLEDON
+    )
+
+    val ATP_MASTERS_1000_LIST: List<Tournament> = listOf(
+        INDIAN_WELLS,
+        MIAMI_OPEN,
+        MONTE_CARLO_MASTERS,
+        MADRID_OPEN,
+        ITALIAN_OPEN,
+        CANADIAN_OPEN,
+        CINCINNATI_OPEN,
+        SHANGHAI_MASTERS,
+        PARIS_MASTERS
+    )
+
+    val WTA_1000_LIST: List<Tournament> = listOf(
+        DOHA_OPEN,
+        DUBAI_CHAMPIONSHIPS,
+        INDIAN_WELLS,
+        MIAMI_OPEN,
+        MADRID_OPEN,
+        ITALIAN_OPEN,
+        CANADIAN_OPEN,
+        CINCINNATI_OPEN,
+        CHINA_OPEN,
+        WUHAN_OPEN
     )
 
     val MASTERS_1000_LIST: List<Tournament> = listOf(
@@ -793,6 +1106,7 @@ object Tournaments {
         BARCELONA_OPEN,
         QUEENS_CLUB,
         HALLE_OPEN,
+        HAMBURG_OPEN,
         WASHINGTON_OPEN,
         TOKYO_OPEN,
         VIENNA_OPEN,
@@ -803,7 +1117,16 @@ object Tournaments {
         CHARLESTON_OPEN,
         STUTTGART_OPEN,
         BERLIN_OPEN,
-        SAN_DIEGO_OPEN
+        SAN_DIEGO_OPEN,
+        ABU_DHABI_OPEN,
+        STRASBOURG_OPEN,
+        BAD_HOMBURG_OPEN,
+        MONTERREY_OPEN,
+        GUADALAJARA_OPEN,
+        SEOUL_OPEN,
+        NINGBO_OPEN,
+        PAN_PACIFIC_OPEN,
+        ZHENGZHOU_OPEN
     )
 
     val ATP_250_LIST: List<Tournament> = listOf(
@@ -825,8 +1148,23 @@ object Tournaments {
         ANTWERP_OPEN
     )
 
+    val WTA_250_LIST: List<Tournament> = listOf(
+        AUCKLAND_ASB_CLASSIC,
+        HOBART_INTERNATIONAL,
+        THAILAND_OPEN,
+        AUSTIN_ATX_OPEN,
+        NOTTINGHAM_OPEN,
+        BIRMINGHAM_CLASSIC,
+        PALERMO_OPEN,
+        PRAGUE_OPEN,
+        CLEVELAND_OPEN,
+        GUANGZHOU_OPEN,
+        HONG_KONG_OPEN,
+        JIUJIANG_OPEN
+    )
+
     /**
-     * Preserves exact backwards compatibility with original 9 popular tournaments.
+     * Curated popular and major tournaments displayed prominently in UI filters.
      */
     val POPULAR_TOURNAMENTS: List<Tournament> = listOf(
         ALL,
@@ -836,8 +1174,15 @@ object Tournaments {
         WIMBLEDON,
         INDIAN_WELLS,
         MIAMI_OPEN,
+        MONTE_CARLO_MASTERS,
         MADRID_OPEN,
-        ITALIAN_OPEN
+        ITALIAN_OPEN,
+        CANADIAN_OPEN,
+        CINCINNATI_OPEN,
+        SHANGHAI_MASTERS,
+        PARIS_MASTERS,
+        CHINA_OPEN,
+        WUHAN_OPEN
     )
 
     /**
@@ -869,6 +1214,7 @@ object Tournaments {
         BARCELONA_OPEN,
         QUEENS_CLUB,
         HALLE_OPEN,
+        HAMBURG_OPEN,
         WASHINGTON_OPEN,
         TOKYO_OPEN,
         VIENNA_OPEN,
@@ -877,6 +1223,15 @@ object Tournaments {
         STUTTGART_OPEN,
         BERLIN_OPEN,
         SAN_DIEGO_OPEN,
+        ABU_DHABI_OPEN,
+        STRASBOURG_OPEN,
+        BAD_HOMBURG_OPEN,
+        MONTERREY_OPEN,
+        GUADALAJARA_OPEN,
+        SEOUL_OPEN,
+        NINGBO_OPEN,
+        PAN_PACIFIC_OPEN,
+        ZHENGZHOU_OPEN,
         BRISBANE_INTERNATIONAL,
         ADELAIDE_INTERNATIONAL,
         AUCKLAND_OPEN,
@@ -892,7 +1247,19 @@ object Tournaments {
         CHENGDU_OPEN,
         ZHUHAI_CHAMPIONSHIPS,
         STOCKHOLM_OPEN,
-        ANTWERP_OPEN
+        ANTWERP_OPEN,
+        AUCKLAND_ASB_CLASSIC,
+        HOBART_INTERNATIONAL,
+        THAILAND_OPEN,
+        AUSTIN_ATX_OPEN,
+        NOTTINGHAM_OPEN,
+        BIRMINGHAM_CLASSIC,
+        PALERMO_OPEN,
+        PRAGUE_OPEN,
+        CLEVELAND_OPEN,
+        GUANGZHOU_OPEN,
+        HONG_KONG_OPEN,
+        JIUJIANG_OPEN
     )
 
     /**
