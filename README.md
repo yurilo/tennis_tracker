@@ -4,7 +4,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.21)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.21/TennisTracker-v1.0.21.apk)**
+📥 **[Download Latest APK (v1.0.22)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.22/TennisTracker-v1.0.22.apk)**
 
 ---
 
@@ -71,7 +71,7 @@ us_open_tracker/
 ├── app/
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── java/com/usopen/tracker/
+│   │   │   ├── java/com/tennis/tracker/
 │   │   │   │   ├── data/          # Remote ESPN API, local fixtures, repository impl
 │   │   │   │   ├── domain/        # Match & Competitor models, profile provider, use cases
 │   │   │   │   ├── ui/            # Compose screens, components, theme, view models

@@ -1,22 +1,22 @@
 # Project: Tennis Tracker Multi-Tournament Support
 
 ## Architecture
-- **Layer 1: Domain Models (`com.usopen.tracker.domain.model`)**:
+- **Layer 1: Domain Models (`com.tennis.tracker.domain.model`)**:
   - Core abstractions: `Tournament`, `TourType` (ATP, WTA, COMBINED), `TournamentCategory` (GRAND_SLAM, MASTERS_1000/WTA_1000, ATP_500/WTA_500, ATP_250/WTA_250, FINALS), `CourtSurface` (HARD, CLAY, GRASS, CARPET), `Match`, `H2H`.
   - Dynamic discovery & resolution: `TournamentResolver`.
-- **Layer 2: Remote & Local Data (`com.usopen.tracker.data`)**:
+- **Layer 2: Remote & Local Data (`com.tennis.tracker.data`)**:
   - `EspnScoreboardApi`: Live ESPN feed parsing, metadata assignment via `TournamentResolver`.
   - `EspnWatchMatcher`: Video stream matching with pre-indexed streams and compiled regex patterns.
   - `YouTubeHighlightResolver`: Video highlight matching with pre-lowercased official channel set.
   - `TennisStatsApi`: Live stats parsing with indexed player token lookup.
   - `ScoreboardRepositoryImpl`: Match fetching, caching, deduplication with `distinctBy`, thread-safe state.
   - `H2HDataProvider`, `MockH2HData`, `MockTournamentData`: Dynamic year/date resolution via `Year.now()`, `LocalDate.now()`, `Instant.now()`.
-- **Layer 3: UI & ViewModel (`com.usopen.tracker.ui`)**:
+- **Layer 3: UI & ViewModel (`com.tennis.tracker.ui`)**:
   - `TourTierFilter`: Enum for tour tier chips (`All`, `Grand Slams`, `ATP Tour`, `WTA Tour`, `1000s`, `500s/250s`).
   - `ScoreboardUiState`: Holds `selectedTierFilter`, `currentTournament`, `contextualTournaments`, and matches.
   - `ScoreboardViewModel`: Handles tier filter selection, contextual tournament generation, and multi-stage match filtering.
   - `ScoreboardScreen`: Tiered chip rows (`TourTierChipsRow`, `ContextualTournamentChipsRow`, `FilterChipsRow`).
-- **Layer 4: Automated Testing (`com.usopen.tracker.test`)**:
+- **Layer 4: Automated Testing (`com.tennis.tracker.test`)**:
   - Comprehensive unit tests covering dynamic dates, tournament classification, collection pipelines, and regression suite.
   - Opaque-box E2E test suite (Tiers 1-4) and adversarial hardening (Tier 5).
 
@@ -98,34 +98,34 @@
 
 ## Code Layout & Write Ownership
 - **Milestone 1 Exclusives**:
-  - `app/src/main/java/com/usopen/tracker/data/local/H2HDataProvider.kt`
-  - `app/src/main/java/com/usopen/tracker/data/local/MockH2HData.kt`
-  - `app/src/main/java/com/usopen/tracker/data/local/MockTournamentData.kt`
-  - `app/src/test/java/com/usopen/tracker/data/local/MockTournamentData.kt`
-  - `app/src/main/java/com/usopen/tracker/data/remote/EspnWatchApi.kt`
-  - `app/src/main/java/com/usopen/tracker/util/TimezoneFormatter.kt`
-  - `app/src/test/java/com/usopen/tracker/domain/H2HTest.kt`
+  - `app/src/main/java/com/tennis/tracker/data/local/H2HDataProvider.kt`
+  - `app/src/main/java/com/tennis/tracker/data/local/MockH2HData.kt`
+  - `app/src/main/java/com/tennis/tracker/data/local/MockTournamentData.kt`
+  - `app/src/test/java/com/tennis/tracker/data/local/MockTournamentData.kt`
+  - `app/src/main/java/com/tennis/tracker/data/remote/EspnWatchApi.kt`
+  - `app/src/main/java/com/tennis/tracker/util/TimezoneFormatter.kt`
+  - `app/src/test/java/com/tennis/tracker/domain/H2HTest.kt`
 - **Milestone 2 Exclusives**:
-  - `app/src/main/java/com/usopen/tracker/domain/model/TourType.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/TournamentCategory.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/CourtSurface.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/Tournament.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/TournamentResolver.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/Match.kt`
-  - `app/src/main/java/com/usopen/tracker/domain/model/H2H.kt` (import CourtSurface)
+  - `app/src/main/java/com/tennis/tracker/domain/model/TourType.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/TournamentCategory.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/CourtSurface.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/Tournament.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/TournamentResolver.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/Match.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/H2H.kt` (import CourtSurface)
 - **Milestone 3 Exclusives**:
-  - `app/src/main/java/com/usopen/tracker/ui/viewmodel/TourTierFilter.kt`
-  - `app/src/main/java/com/usopen/tracker/ui/viewmodel/ScoreboardViewModel.kt`
-  - `app/src/main/java/com/usopen/tracker/ui/screen/ScoreboardScreen.kt`
+  - `app/src/main/java/com/tennis/tracker/ui/viewmodel/TourTierFilter.kt`
+  - `app/src/main/java/com/tennis/tracker/ui/viewmodel/ScoreboardViewModel.kt`
+  - `app/src/main/java/com/tennis/tracker/ui/screen/ScoreboardScreen.kt`
 - **Milestone 4 Exclusives**:
-  - `app/src/main/java/com/usopen/tracker/data/repository/ScoreboardRepositoryImpl.kt`
-  - `app/src/main/java/com/usopen/tracker/data/remote/EspnScoreboardApi.kt`
-  - `app/src/main/java/com/usopen/tracker/data/remote/EspnWatchMatcher.kt`
-  - `app/src/main/java/com/usopen/tracker/data/remote/YouTubeHighlightResolver.kt`
-  - `app/src/main/java/com/usopen/tracker/data/remote/TennisStatsApi.kt`
+  - `app/src/main/java/com/tennis/tracker/data/repository/ScoreboardRepositoryImpl.kt`
+  - `app/src/main/java/com/tennis/tracker/data/remote/EspnScoreboardApi.kt`
+  - `app/src/main/java/com/tennis/tracker/data/remote/EspnWatchMatcher.kt`
+  - `app/src/main/java/com/tennis/tracker/data/remote/YouTubeHighlightResolver.kt`
+  - `app/src/main/java/com/tennis/tracker/data/remote/TennisStatsApi.kt`
 - **Milestone 5 Exclusives**:
-  - `app/src/test/java/com/usopen/tracker/domain/DynamicYearResolutionTest.kt`
-  - `app/src/test/java/com/usopen/tracker/domain/TournamentClassificationTest.kt`
-  - `app/src/test/java/com/usopen/tracker/ui/TieredFilterViewModelTest.kt`
-  - `app/src/test/java/com/usopen/tracker/data/CollectionPipelineOptimizationTest.kt`
+  - `app/src/test/java/com/tennis/tracker/domain/DynamicYearResolutionTest.kt`
+  - `app/src/test/java/com/tennis/tracker/domain/TournamentClassificationTest.kt`
+  - `app/src/test/java/com/tennis/tracker/ui/TieredFilterViewModelTest.kt`
+  - `app/src/test/java/com/tennis/tracker/data/CollectionPipelineOptimizationTest.kt`
   - E2E testing test runner & verification scripts
