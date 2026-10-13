@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.usopen.tracker.domain.model.DeepLink
@@ -769,7 +770,9 @@ fun TourTierChipsRow(
                     Text(
                         text = "${tier.icon} ${tier.displayName}",
                         fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(
@@ -812,9 +815,11 @@ fun ContextualTournamentChipsRow(
                 onClick = { onTournamentSelected(tourney) },
                 label = {
                     Text(
-                        text = "$iconPrefix ${tourney.displayName}",
+                        text = "$iconPrefix ${tourney.shortDisplayName}",
                         fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(

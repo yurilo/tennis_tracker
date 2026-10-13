@@ -950,7 +950,9 @@ private fun HistoricalMatchCard(
                             text = "CURRENT MATCH • ${match.tournamentName.ifEmpty { "TENNIS" }.uppercase()}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            color = colors.headerTitleColor
+                            color = colors.headerTitleColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1040,7 +1042,9 @@ private fun HistoricalMatchCard(
                     text = match.tournamentName,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Row(

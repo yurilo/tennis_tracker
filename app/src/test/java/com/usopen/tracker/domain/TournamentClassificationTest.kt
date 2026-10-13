@@ -411,6 +411,73 @@ class TournamentClassificationTest {
         assertEquals(CourtSurface.HARD, matchFromGrouping.effectiveSurface) // default surface
     }
 
+    // -------------------------------------------------------------------------
+    // 8. Tournament Display Name Limiting & shortDisplayName Best Practices
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun testTournament_shortDisplayName_canonicalAbbreviations() {
+        assertEquals("All", Tournaments.ALL.shortDisplayName)
+        assertEquals("US Open", Tournaments.US_OPEN.shortDisplayName)
+        assertEquals("Australian Open", Tournaments.AUSTRALIAN_OPEN.shortDisplayName)
+        assertEquals("Wimbledon", Tournaments.WIMBLEDON.shortDisplayName)
+
+        // Known long tournament names abbreviated cleanly for UI chips
+        assertEquals("Dubai", Tournaments.DUBAI_CHAMPIONSHIPS.shortDisplayName)
+        assertEquals("Queen's", Tournaments.QUEENS_CLUB.shortDisplayName)
+        assertEquals("Monte-Carlo", Tournaments.MONTE_CARLO_MASTERS.shortDisplayName)
+        assertEquals("Shanghai", Tournaments.SHANGHAI_MASTERS.shortDisplayName)
+        assertEquals("Paris", Tournaments.PARIS_MASTERS.shortDisplayName)
+        assertEquals("Eastbourne", Tournaments.EASTBOURNE_INTERNATIONAL.shortDisplayName)
+        assertEquals("Brisbane", Tournaments.BRISBANE_INTERNATIONAL.shortDisplayName)
+        assertEquals("Adelaide", Tournaments.ADELAIDE_INTERNATIONAL.shortDisplayName)
+        assertEquals("Kitzbühel", Tournaments.KITZBUHEL_OPEN.shortDisplayName)
+        assertEquals("Gstaad", Tournaments.GSTAAD_OPEN.shortDisplayName)
+    }
+
+    @Test
+    fun testTournament_shortDisplayName_filterIds() {
+        val filter1000 = Tournament(id = "all_1000", displayName = "Masters & WTA 1000")
+        assertEquals("All 1000s", filter1000.shortDisplayName)
+
+        val filterSlams = Tournament(id = "all_grand_slams", displayName = "Grand Slam Majors")
+        assertEquals("All Slams", filterSlams.shortDisplayName)
+
+        val filter500 = Tournament(id = "all_500_250", displayName = "500s & 250s Tour")
+        assertEquals("All 500/250", filter500.shortDisplayName)
+    }
+
+    @Test
+    fun testTournament_shortDisplayName_truncationFallback() {
+        val longTournament = Tournament(
+            id = "custom_dynamic_tourney",
+            displayName = "Exhibition International Super Cup"
+        )
+        // Length > 18 characters should be cleanly truncated with an ellipsis
+        assertTrue(longTournament.shortDisplayName.endsWith("…"))
+        assertTrue(longTournament.shortDisplayName.length <= 17)
+        assertEquals("Exhibition Inter…", longTournament.shortDisplayName)
+
+        val shortTournament = Tournament(
+            id = "custom_short",
+            displayName = "Tokyo Open"
+        )
+        assertEquals("Tokyo Open", shortTournament.shortDisplayName)
+    }
+
+    @Test
+    fun testTournament_dubaiAliasesAndMatchingPreserved() {
+        val dubai = Tournaments.DUBAI_CHAMPIONSHIPS
+        // Verify aliases preserve the full official names
+        assertTrue(dubai.aliases.contains("Dubai Tennis Championships"))
+        assertTrue(dubai.aliases.contains("Dubai Duty Free Tennis Championships"))
+
+        // Matching preserves backward-compatibility with live feeds
+        assertTrue(dubai.matches("Dubai Open"))
+        assertTrue(dubai.matches("Dubai Tennis Championships"))
+        assertTrue(dubai.matches("Dubai Duty Free Tennis Championships"))
+    }
+
     private fun createMatch(
         tour: TourType?,
         category: TournamentCategory?,

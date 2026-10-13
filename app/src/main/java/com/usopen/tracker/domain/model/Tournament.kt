@@ -38,6 +38,32 @@ data class Tournament(
     )
 
     /**
+     * Compact display name optimized for space-constrained UI elements (filter chips, card headers).
+     * Strips redundant suffixes and limits length to prevent crowding.
+     */
+    val shortDisplayName: String
+        get() = when {
+            id.equals("all", ignoreCase = true) -> "All"
+            id.equals("all_grand_slams", ignoreCase = true) -> "All Slams"
+            id.equals("all_atp", ignoreCase = true) -> "All ATP"
+            id.equals("all_wta", ignoreCase = true) -> "All WTA"
+            id.equals("all_1000", ignoreCase = true) -> "All 1000s"
+            id.equals("all_500_250", ignoreCase = true) -> "All 500/250"
+            id == "dubai_tennis_championships" -> "Dubai"
+            id == "queens_club" -> "Queen's"
+            id == "monte_carlo" -> "Monte-Carlo"
+            id == "shanghai_masters" -> "Shanghai"
+            id == "paris_masters" -> "Paris"
+            id == "eastbourne_international" -> "Eastbourne"
+            id == "brisbane_international" -> "Brisbane"
+            id == "adelaide_international" -> "Adelaide"
+            id == "kitzbuhel_open" -> "Kitzbühel"
+            id == "gstaad_open" -> "Gstaad"
+            displayName.length > 18 -> displayName.take(16).trimEnd() + "…"
+            else -> displayName
+        }
+
+    /**
      * Checks whether an event or competition tournament string matches this tournament.
 
      * Matches against displayName and known aliases (case-insensitive, trimmed).
@@ -280,7 +306,7 @@ object Tournaments {
 
     val DUBAI_CHAMPIONSHIPS = Tournament(
         id = "dubai_tennis_championships",
-        displayName = "Dubai Tennis Championships",
+        displayName = "Dubai Open",
         aliases = setOf("Dubai Tennis Championships", "Dubai Duty Free Tennis Championships", "Dubai Open", "Dubai"),
         defaultVenue = "Centre Court",
         isGrandSlam = false,
@@ -390,8 +416,8 @@ object Tournaments {
 
     val QUEENS_CLUB = Tournament(
         id = "queens_club",
-        displayName = "Queen's Club Championships",
-        aliases = setOf("cinch Championships", "Queen's Club", "Queens Club", "Queen's"),
+        displayName = "Queen's Club",
+        aliases = setOf("Queen's Club Championships", "cinch Championships", "Queen's Club", "Queens Club", "Queen's"),
         defaultVenue = "Centre Court",
         isGrandSlam = false,
         tour = TourType.ATP,
@@ -614,8 +640,8 @@ object Tournaments {
 
     val EASTBOURNE_INTERNATIONAL = Tournament(
         id = "eastbourne_international",
-        displayName = "Eastbourne International",
-        aliases = setOf("Rothesay International", "Eastbourne"),
+        displayName = "Eastbourne Open",
+        aliases = setOf("Eastbourne International", "Rothesay International", "Eastbourne"),
         defaultVenue = "Devonshire Park Lawn Tennis Club",
         isGrandSlam = false,
         tour = TourType.COMBINED,
@@ -640,7 +666,7 @@ object Tournaments {
 
     val GSTAAD_OPEN = Tournament(
         id = "gstaad_open",
-        displayName = "Swiss Open Gstaad",
+        displayName = "Gstaad Open",
         aliases = setOf("Swiss Open Gstaad", "Gstaad"),
         defaultVenue = "Roy Emerson Arena",
         isGrandSlam = false,
@@ -653,8 +679,8 @@ object Tournaments {
 
     val KITZBUHEL_OPEN = Tournament(
         id = "kitzbuhel_open",
-        displayName = "Austrian Open Kitzbühel",
-        aliases = setOf("Generali Open Kitzbühel", "Kitzbühel", "Kitzbuhel"),
+        displayName = "Kitzbühel Open",
+        aliases = setOf("Austrian Open Kitzbühel", "Generali Open Kitzbühel", "Kitzbühel", "Kitzbuhel"),
         defaultVenue = "Kitzbühel Tennis Stadium",
         isGrandSlam = false,
         tour = TourType.ATP,
