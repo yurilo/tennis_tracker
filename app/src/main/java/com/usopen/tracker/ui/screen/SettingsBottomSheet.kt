@@ -402,7 +402,7 @@ fun SettingsBottomSheet(
                 WidgetSyncOptionCard(
                     title = "Adaptive",
                     badge = "Recommended",
-                    description = "Dynamic polling: 1m when any match is LIVE, 5m when UPCOMING, 15m when idle/results.",
+                    description = "Dynamic polling: respects app auto-refresh setting for active matches, 15m when idle/results.",
                     selected = settings.widgetSyncMode == WidgetSyncMode.ADAPTIVE,
                     isDark = isDark,
                     cardBorderColor = cardBorderColor,

@@ -9,7 +9,7 @@ enum class WidgetSyncMode(
 ) {
     ADAPTIVE(
         displayName = "Adaptive",
-        description = "Intelligent sync: 1m for live matches, 5m for upcoming, 15m when idle."
+        description = "Intelligent sync: 1m (or app auto-refresh setting) for live matches, 5m fallback for upcoming, 15m when idle."
     ),
     INTERVAL_15M(
         displayName = "15 minutes",
@@ -26,17 +26,25 @@ enum class WidgetSyncMode(
 
     /**
      * Resolves the background sync interval in milliseconds for the given set of matches and followed IDs.
-     * Returns null when background sync is [DISABLED].
+     * Optionally respects [autoRefreshInterval] configured in app settings.
+     * Returns null when background sync is [DISABLED] or when [autoRefreshInterval] is [AutoRefreshInterval.OFF].
      */
+    @JvmOverloads
     fun resolveIntervalMillis(
         matches: List<Match>,
-        followedIds: Set<String>
+        followedIds: Set<String>,
+        autoRefreshInterval: AutoRefreshInterval? = null
     ): Long? {
         return when (this) {
             DISABLED -> null
             INTERVAL_15M -> 15 * 60 * 1000L
             INTERVAL_30M -> 30 * 60 * 1000L
             ADAPTIVE -> {
+                if (autoRefreshInterval != null && !autoRefreshInterval.isEnabled) {
+                    return null
+                }
+                val activeRate = autoRefreshInterval?.periodMillis ?: 60_000L
+
                 val relevantMatches = if (followedIds.isNotEmpty()) {
                     matches.filter { it.id in followedIds }
                 } else {
@@ -44,10 +52,12 @@ enum class WidgetSyncMode(
                 }
 
                 if (relevantMatches.isEmpty()) {
-                    900_000L // 15 minutes default / idle
+                    if (autoRefreshInterval != null) activeRate else 900_000L
                 } else when {
-                    relevantMatches.any { it.state == MatchState.LIVE } -> 60_000L // 1 minute
-                    relevantMatches.any { it.state == MatchState.UPCOMING } -> 300_000L // 5 minutes
+                    relevantMatches.any { it.state == MatchState.LIVE } -> activeRate
+                    relevantMatches.any { it.state == MatchState.UPCOMING } -> {
+                        if (autoRefreshInterval != null) activeRate else 300_000L
+                    }
                     else -> 900_000L // 15 minutes
                 }
             }
