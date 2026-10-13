@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import com.usopen.tracker.data.local.FakeSharedPreferences
 import com.usopen.tracker.data.repository.SettingsRepositoryImpl
+import com.usopen.tracker.domain.model.AutoRefreshInterval
 import com.usopen.tracker.domain.model.Competitor
 import com.usopen.tracker.domain.model.Match
 import com.usopen.tracker.domain.model.MatchState
@@ -250,14 +251,29 @@ class WidgetAutoSyncManagerSettingsTest {
         val text30m = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
         assertTrue("Expected '(30m)', got: $text30m", text30m.contains("(30m)"))
 
-        // 4. ADAPTIVE Mode with Live matches -> (1m)
+        // 4. ADAPTIVE Mode respects AutoRefreshInterval (default 60s -> 1m)
         settingsRepo.updateWidgetSyncMode(WidgetSyncMode.ADAPTIVE)
         val textAdaptiveLive = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = true)
         assertTrue("Expected '(1m)', got: $textAdaptiveLive", textAdaptiveLive.contains("(1m)"))
 
-        // 5. ADAPTIVE Mode without Live matches -> (5m)
+        // 5. ADAPTIVE Mode without live matches respects the same auto-refresh setting (1m, not 5m!)
         val textAdaptiveNoLive = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
-        assertTrue("Expected '(5m)', got: $textAdaptiveNoLive", textAdaptiveNoLive.contains("(5m)"))
+        assertTrue("Expected '(1m)', got: $textAdaptiveNoLive", textAdaptiveNoLive.contains("(1m)"))
+
+        // 6. ADAPTIVE Mode with custom 30s auto-refresh setting
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.INTERVAL_30S)
+        val textAdaptive30s = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue("Expected '(30s)', got: $textAdaptive30s", textAdaptive30s.contains("(30s)"))
+
+        // 7. ADAPTIVE Mode with custom 2m auto-refresh setting
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.INTERVAL_2M)
+        val textAdaptive2m = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue("Expected '(2m)', got: $textAdaptive2m", textAdaptive2m.contains("(2m)"))
+
+        // 8. Auto-refresh OFF disables widget auto sync
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.OFF)
+        val textAutoOff = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue("Expected 'Auto: OFF', got: $textAutoOff", textAutoOff.contains("Auto: OFF"))
     }
 
     // =========================================================================
@@ -303,5 +319,85 @@ class WidgetAutoSyncManagerSettingsTest {
         assertEquals(WidgetSyncMode.ADAPTIVE, WidgetSyncMode.fromNameOrDefault("UNKNOWN_NAME"))
         assertEquals(WidgetSyncMode.INTERVAL_15M, WidgetSyncMode.fromNameOrDefault("INTERVAL_15M"))
         assertEquals(WidgetSyncMode.DISABLED, WidgetSyncMode.fromNameOrDefault("DISABLED"))
+    }
+
+    // =========================================================================
+    // 9. Respecting App Auto-Refresh Interval (Fix for 5-minute hardcode)
+    // =========================================================================
+
+    @Test
+    fun testAdaptiveModeRespectsAutoRefreshSettingForUpcomingMatches() {
+        val matches = listOf(
+            createMatch("m-upcoming-followed", MatchState.UPCOMING),
+            createMatch("m-finished-followed", MatchState.FINISHED)
+        )
+        val followedIds = setOf("m-upcoming-followed", "m-finished-followed")
+
+        // 1. With default 60s auto-refresh setting -> 60,000ms (1 minute, NOT 5 minutes!)
+        val interval60s = WidgetSyncMode.ADAPTIVE.resolveIntervalMillis(
+            matches, followedIds, AutoRefreshInterval.INTERVAL_60S
+        )
+        assertEquals(60_000L, interval60s)
+        val calc60s = WidgetAutoSyncManager.calculateInterval(
+            matches, followedIds, WidgetSyncMode.ADAPTIVE, AutoRefreshInterval.INTERVAL_60S
+        )
+        assertEquals(60_000L, calc60s)
+
+        // 2. With 30s auto-refresh setting -> 30,000ms
+        val interval30s = WidgetSyncMode.ADAPTIVE.resolveIntervalMillis(
+            matches, followedIds, AutoRefreshInterval.INTERVAL_30S
+        )
+        assertEquals(30_000L, interval30s)
+        val calc30s = WidgetAutoSyncManager.calculateInterval(
+            matches, followedIds, WidgetSyncMode.ADAPTIVE, AutoRefreshInterval.INTERVAL_30S
+        )
+        assertEquals(30_000L, calc30s)
+
+        // 3. With 2m auto-refresh setting -> 120,000ms
+        val interval2m = WidgetSyncMode.ADAPTIVE.resolveIntervalMillis(
+            matches, followedIds, AutoRefreshInterval.INTERVAL_2M
+        )
+        assertEquals(120_000L, interval2m)
+        val calc2m = WidgetAutoSyncManager.calculateInterval(
+            matches, followedIds, WidgetSyncMode.ADAPTIVE, AutoRefreshInterval.INTERVAL_2M
+        )
+        assertEquals(120_000L, calc2m)
+
+        // 4. With OFF auto-refresh setting -> null (disabled)
+        val intervalOff = WidgetSyncMode.ADAPTIVE.resolveIntervalMillis(
+            matches, followedIds, AutoRefreshInterval.OFF
+        )
+        org.junit.Assert.assertNull(intervalOff)
+
+        // 5. Without autoRefreshInterval parameter (backward compatibility) -> 300,000ms
+        val intervalLegacy = WidgetSyncMode.ADAPTIVE.resolveIntervalMillis(matches, followedIds, null)
+        assertEquals(300_000L, intervalLegacy)
+    }
+
+    @Test
+    fun testWidgetAutoSyncManagerDynamicAutoRefreshSettingUpdates() = runBlocking {
+        // Initial default: INTERVAL_60S -> status contains (1m)
+        assertEquals(AutoRefreshInterval.INTERVAL_60S, WidgetAutoSyncManager.getAutoRefreshInterval(testContext))
+        val textDefault = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue(textDefault.contains("(1m)"))
+
+        // Update to 30s
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.INTERVAL_30S)
+        assertEquals(AutoRefreshInterval.INTERVAL_30S, WidgetAutoSyncManager.getAutoRefreshInterval(testContext))
+        val text30s = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue(text30s.contains("(30s)"))
+
+        // Update to 2m
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.INTERVAL_2M)
+        assertEquals(AutoRefreshInterval.INTERVAL_2M, WidgetAutoSyncManager.getAutoRefreshInterval(testContext))
+        val text2m = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue(text2m.contains("(2m)"))
+
+        // Update to OFF
+        settingsRepo.updateAutoRefreshInterval(AutoRefreshInterval.OFF)
+        assertEquals(AutoRefreshInterval.OFF, WidgetAutoSyncManager.getAutoRefreshInterval(testContext))
+        assertFalse(WidgetAutoSyncManager.isAutoSyncEnabled(testContext))
+        val textOff = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
+        assertTrue(textOff.contains("Auto: OFF"))
     }
 }

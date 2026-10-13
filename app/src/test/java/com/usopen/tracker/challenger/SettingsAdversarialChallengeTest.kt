@@ -461,9 +461,9 @@ class SettingsAdversarialChallengeTest {
         val textAdaptiveLive = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = true)
         assertTrue("Adaptive live text must contain '(1m)', got: $textAdaptiveLive", textAdaptiveLive.contains("(1m)"))
 
-        // Adaptive without live matches -> "(5m)"
+        // Adaptive without live matches respects auto-refresh setting (1m)
         val textAdaptiveUpcoming = WidgetAutoSyncManager.getSyncStatusText(testContext, hasLiveMatches = false)
-        assertTrue("Adaptive non-live text must contain '(5m)', got: $textAdaptiveUpcoming", textAdaptiveUpcoming.contains("(5m)"))
+        assertTrue("Adaptive non-live text must contain '(1m)', got: $textAdaptiveUpcoming", textAdaptiveUpcoming.contains("(1m)"))
     }
 
     @Test
