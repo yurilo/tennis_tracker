@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "UsOpenTracker"
+rootProject.name = "TennisTracker"
 include(":app")

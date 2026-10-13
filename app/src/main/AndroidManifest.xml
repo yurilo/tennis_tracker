@@ -28,7 +28,7 @@
     </queries>
 
     <application
-        android:name=".UsOpenApp"
+        android:name=".TennisApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -36,12 +36,12 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.UsOpenTracker">
+        android:theme="@style/Theme.TennisTracker">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.UsOpenTracker">
+            android:theme="@style/Theme.TennisTracker">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -56,10 +56,10 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="android.appwidget.action.APPWIDGET_ENABLED" />
-                <action android:name="com.usopen.tracker.ACTION_REFRESH_WIDGET" />
-                <action android:name="com.usopen.tracker.ACTION_AUTO_SYNC_WIDGET" />
-                <action android:name="com.usopen.tracker.ACTION_TOGGLE_AUTO_SYNC" />
-                <action android:name="com.usopen.tracker.ACTION_PINNED_SUCCESS" />
+                <action android:name="com.tennis.tracker.ACTION_REFRESH_WIDGET" />
+                <action android:name="com.tennis.tracker.ACTION_AUTO_SYNC_WIDGET" />
+                <action android:name="com.tennis.tracker.ACTION_TOGGLE_AUTO_SYNC" />
+                <action android:name="com.tennis.tracker.ACTION_PINNED_SUCCESS" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.USER_PRESENT" />

@@ -13,7 +13,7 @@
 The test suite is structured into four distinct verification tiers according to the E2E Testing Protocol, testing strictly against authentic production contracts without dummy reflection or fake mocks.
 
 ```
-app/src/test/java/com/usopen/tracker/test/e2e/settings/
+app/src/test/java/com/tennis/tracker/test/e2e/settings/
 ├── SettingsTier1FeatureCoverageTest.kt       (60 test cases: F1–F12 isolated happy paths)
 ├── SettingsTier2BoundaryCornerCaseTest.kt    (60 test cases: F1–F12 boundary, stress & corner cases)
 ├── SettingsTier3CrossFeatureTest.kt          (12 test cases: pairwise combinatorial interactions)
@@ -97,7 +97,7 @@ app/src/test/java/com/usopen/tracker/test/e2e/settings/
 Execute the standalone JUnit runner via Java command line:
 
 ```bash
-java -cp "build_test_cache/main:build_test_cache/test:app/build/tmp/kotlin-classes/debug:/home/droid/.gradle/caches/transforms-3/4d82a2dbc3adfbb133937cfe6f2b0930/transformed/android.jar:$(cat /home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt | tr '\n' ':')" com.usopen.tracker.test.e2e.settings.SettingsE2ETestSuite
+java -cp "build_test_cache/main:build_test_cache/test:app/build/tmp/kotlin-classes/debug:/home/droid/.gradle/caches/transforms-3/4d82a2dbc3adfbb133937cfe6f2b0930/transformed/android.jar:$(cat /home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt | tr '\n' ':')" com.tennis.tracker.test.e2e.settings.SettingsE2ETestSuite
 ```
 
 ### Expected Output:

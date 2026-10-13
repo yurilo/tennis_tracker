@@ -71,7 +71,7 @@ us_open_tracker/
 ├── app/
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── java/com/usopen/tracker/
+│   │   │   ├── java/com/tennis/tracker/
 │   │   │   │   ├── data/          # Remote ESPN API, local fixtures, repository impl
 │   │   │   │   ├── domain/        # Match & Competitor models, profile provider, use cases
 │   │   │   │   ├── ui/            # Compose screens, components, theme, view models

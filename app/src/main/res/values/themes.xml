@@ -1,6 +1,8 @@
 <resources>
-    <style name="Theme.UsOpenTracker" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/us_open_blue</item>
-        <item name="android:navigationBarColor">@color/us_open_blue</item>
+    <style name="Theme.TennisTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/tennis_blue</item>
+        <item name="android:navigationBarColor">@color/tennis_blue</item>
     </style>
+    <!-- Backward compatibility alias -->
+    <style name="Theme.UsOpenTracker" parent="Theme.TennisTracker" />
 </resources>

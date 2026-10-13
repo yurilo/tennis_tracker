@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.usopen.tracker"
+    namespace = "com.tennis.tracker"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.usopen.tracker"
+        applicationId = "com.tennis.tracker"
         minSdk = 26
         targetSdk = 34
         versionCode = 22

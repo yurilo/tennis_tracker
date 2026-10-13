@@ -24,7 +24,7 @@
 ## Test Architecture
 - **E2E Test Runner**: Dedicated executable JVM runner or Kotlin test runner executing comprehensive opaque-box test scenarios.
 - **Pass/Fail Semantics**: All test cases must assert expected contracts and exit with code 0 on 100% pass.
-- **Location**: `app/src/test/java/com/usopen/tracker/e2e/` and standalone test harness.
+- **Location**: `app/src/test/java/com/tennis/tracker/e2e/` and standalone test harness.
 
 ## Real-World Application Scenarios (Tier 4)
 | # | Scenario | Features Exercised | Complexity |
