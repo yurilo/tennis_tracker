@@ -91,17 +91,33 @@ class ScoreboardViewModel(
     private val initialTier: TourTierFilter = settingsRepository.getSettings().defaultTournament.tourTierFilter
 
     private val _uiState = MutableStateFlow(
-        ScoreboardUiState(
-            isLoading = true,
-            currentTournament = if (initialTier != TourTierFilter.ALL) {
+        run {
+            val initialMatches = repository.getOfflineScoreboard()
+            val initialTournament = if (initialTier != TourTierFilter.ALL) {
                 getTierAllTournament(initialTier).also { repository.setActiveTournament(it) }
             } else {
                 repository.getActiveTournament()
-            },
-            selectedTierFilter = initialTier,
-            contextualTournaments = computeContextualTournaments(emptyList(), initialTier),
-            availableTournaments = computeContextualTournaments(emptyList(), initialTier)
-        )
+            }
+            val initialContextual = computeContextualTournaments(initialMatches, initialTier, initialTournament)
+            ScoreboardUiState(
+                isLoading = initialMatches.isEmpty(),
+                allMatches = initialMatches,
+                currentTournament = initialTournament,
+                selectedTierFilter = initialTier,
+                contextualTournaments = initialContextual,
+                availableTournaments = initialContextual,
+                filteredMatches = applyFilterAndSearch(
+                    matches = initialMatches,
+                    tier = initialTier,
+                    tournament = initialTournament,
+                    filter = MatchFilter.ALL,
+                    query = "",
+                    followedIds = emptySet()
+                ),
+                liveCount = initialMatches.count { it.state == MatchState.LIVE },
+                isOffline = false
+            )
+        }
     )
     val uiState: StateFlow<ScoreboardUiState> = _uiState.asStateFlow()
 
@@ -331,7 +347,7 @@ class ScoreboardViewModel(
             val live = matches.count { it.state == MatchState.LIVE }
             val followed = matches.count { it.id in followedIds }
             _uiState.update { state ->
-                val contextual = computeContextualTournaments(matches, state.selectedTierFilter)
+                val contextual = computeContextualTournaments(matches, state.selectedTierFilter, state.currentTournament)
                 state.copy(
                     allMatches = matches,
                     followedMatchIds = followedIds,
@@ -357,7 +373,9 @@ class ScoreboardViewModel(
     fun loadMatches(forceRefresh: Boolean = false) {
         loadMatchesJob?.cancel()
         loadMatchesJob = viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            if (_uiState.value.allMatches.isEmpty()) {
+                _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            }
             val result = repository.getScoreboard(forceRefresh)
 
             result.onSuccess { matches ->
@@ -371,7 +389,7 @@ class ScoreboardViewModel(
                 val live = matches.count { it.state == MatchState.LIVE }
                 val followed = matches.count { it.id in followedIds }
                 _uiState.update { state ->
-                    val contextual = computeContextualTournaments(matches, state.selectedTierFilter)
+                    val contextual = computeContextualTournaments(matches, state.selectedTierFilter, state.currentTournament)
                     state.copy(
                         isLoading = false,
                         allMatches = matches,
@@ -401,14 +419,15 @@ class ScoreboardViewModel(
                 }
             }.onFailure { throwable ->
                 // Use offline fallback
-                val fallback = repository.getOfflineScoreboard()
+                val current = _uiState.value.allMatches
+                val fallback = if (current.isNotEmpty()) current else repository.getOfflineScoreboard()
                 val fm = followManager ?: ScoreboardRepositoryImpl.appContext?.let { FollowManager.getInstance(it) }
                 fm?.cleanupExpiredFollowedMatches(allMatches = fallback)
                 val followedIds = fm?.getFollowedMatchIds() ?: _uiState.value.followedMatchIds
                 val live = fallback.count { it.state == MatchState.LIVE }
                 val followed = fallback.count { it.id in followedIds }
                 _uiState.update { state ->
-                    val contextual = computeContextualTournaments(fallback, state.selectedTierFilter)
+                    val contextual = computeContextualTournaments(fallback, state.selectedTierFilter, state.currentTournament)
                     state.copy(
                         isLoading = false,
                         allMatches = fallback,
@@ -456,8 +475,11 @@ class ScoreboardViewModel(
     fun selectTournament(tournament: Tournament) {
         repository.setActiveTournament(tournament)
         _uiState.update { state ->
+            val contextual = computeContextualTournaments(state.allMatches, state.selectedTierFilter, tournament)
             state.copy(
                 currentTournament = tournament,
+                contextualTournaments = contextual,
+                availableTournaments = contextual,
                 filteredMatches = applyFilterAndSearch(
                     matches = state.allMatches,
                     tier = state.selectedTierFilter,
@@ -472,8 +494,8 @@ class ScoreboardViewModel(
 
     fun selectTierFilter(tier: TourTierFilter) {
         _uiState.update { state ->
-            val contextual = computeContextualTournaments(state.allMatches, tier)
             val newTournament = getTierAllTournament(tier)
+            val contextual = computeContextualTournaments(state.allMatches, tier, newTournament)
             repository.setActiveTournament(newTournament)
             state.copy(
                 selectedTierFilter = tier,
@@ -769,7 +791,11 @@ class ScoreboardViewModel(
             }
         }
 
-        fun computeContextualTournaments(matches: List<Match>, tier: TourTierFilter): List<Tournament> {
+        fun computeContextualTournaments(
+            matches: List<Match>,
+            tier: TourTierFilter,
+            selectedTournament: Tournament? = null
+        ): List<Tournament> {
             val tierAllOption = getTierAllTournament(tier)
             val matchesInTier = if (tier == TourTierFilter.ALL) {
                 matches
@@ -794,12 +820,17 @@ class ScoreboardViewModel(
                 TourTierFilter.TIER_500_250 -> (Tournaments.ATP_500_LIST + Tournaments.WTA_500_LIST + Tournaments.ATP_250_LIST + Tournaments.WTA_250_LIST)
             }
 
-            // Put active tournaments with live/scheduled matches first, followed by canonical tournaments
-            val remainingCanonical = canonicalDefaults.filterNot { cd ->
-                activeTournaments.any { it.id.equals(cd.id, ignoreCase = true) }
+            val result = if (activeTournaments.isNotEmpty()) {
+                listOf(tierAllOption) + activeTournaments
+            } else {
+                listOf(tierAllOption) + canonicalDefaults
             }
 
-            return listOf(tierAllOption) + activeTournaments + remainingCanonical
+            if (selectedTournament != null && !selectedTournament.id.startsWith("all") && result.none { it.id.equals(selectedTournament.id, ignoreCase = true) }) {
+                return result + selectedTournament
+            }
+
+            return result
         }
 
         val inMemoryFallback: SettingsRepository by lazy { InMemorySettingsRepository() }

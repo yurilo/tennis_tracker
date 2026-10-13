@@ -3,6 +3,7 @@ package com.tennis.tracker.data.repository
 import android.content.Context
 import com.tennis.tracker.data.local.MatchCacheManager
 import com.tennis.tracker.data.local.MockStatsData
+import com.tennis.tracker.data.local.MockTournamentData
 import com.tennis.tracker.data.remote.EspnScoreboardApi
 import com.tennis.tracker.data.remote.EspnWatchApi
 import com.tennis.tracker.data.remote.EspnWatchMatcher
@@ -17,6 +18,8 @@ import com.tennis.tracker.domain.repository.ScoreboardRepository
 import com.tennis.tracker.domain.usecase.DeepLinkGenerator
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 class ScoreboardRepositoryImpl(
@@ -84,7 +87,7 @@ class ScoreboardRepositoryImpl(
     }
 
     override suspend fun getScoreboard(forceRefresh: Boolean): Result<List<Match>> {
-        return getScoreboardInternal(activeTournament, forceRefresh)
+        return getScoreboardInternal(Tournaments.ALL, forceRefresh)
     }
 
     private suspend fun getScoreboardInternal(
@@ -101,25 +104,27 @@ class ScoreboardRepositoryImpl(
         }
 
         if (!forceRefresh && MatchCacheManager.isCacheFresh(appContext)) {
-            val filteredCached = filterMatches(loadCached(), targetTournament)
+            val cached = loadCached()
+            val filteredCached = if (targetTournament == Tournaments.ALL) cached else filterMatches(cached, targetTournament)
             if (filteredCached.isNotEmpty()) {
                 return@withContext Result.success(sortMatches(filteredCached))
             }
         }
 
-        // Attempt online fetch from ATP endpoint
-        val atpResult = api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, targetTournament)
+        // Concurrently fetch ATP and WTA endpoints in parallel
+        val (atpResult, wtaResult) = coroutineScope {
+            val atpDeferred = async { api.fetchScoreboard(EspnScoreboardApi.ATP_SCOREBOARD_URL, targetTournament) }
+            val wtaDeferred = async { api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, targetTournament) }
+            Pair(atpDeferred.await(), wtaDeferred.await())
+        }
         val atpMatches = atpResult.getOrNull() ?: emptyList()
-
-        // Also attempt WTA endpoint for full Men's and Women's coverage
-        val wtaResult = api.fetchScoreboard(EspnScoreboardApi.WTA_SCOREBOARD_URL, targetTournament)
         val wtaMatches = wtaResult.getOrNull() ?: emptyList()
 
         // Deduplicate ATP and WTA match feeds in O(N + M) time preserving first occurrence
         val combined = (atpMatches + wtaMatches).distinctBy { it.id }
 
         // Strictly scope matches to target tournament and exclude invalid TBD matchups
-        val scopedMatches = filterMatches(combined, targetTournament)
+        val scopedMatches = if (targetTournament == Tournaments.ALL) combined else filterMatches(combined, targetTournament)
 
         if (scopedMatches.isNotEmpty()) {
             // Enrich live matches with authentic real-time game scores
@@ -169,9 +174,12 @@ class ScoreboardRepositoryImpl(
             Result.success(sorted)
         } else {
             // If network returned empty or failed, fall back to local cached matches if available
-            val filteredCached = filterMatches(loadCached(), targetTournament)
+            val cached = loadCached()
+            val filteredCached = if (targetTournament == Tournaments.ALL) cached else filterMatches(cached, targetTournament)
             if (filteredCached.isNotEmpty()) {
                 Result.success(sortMatches(filteredCached))
+            } else if (atpResult.isSuccess || wtaResult.isSuccess) {
+                Result.success(emptyList())
             } else {
                 Result.failure(Exception("Scoreboard data unavailable. Connect to internet to sync."))
             }
@@ -183,8 +191,11 @@ class ScoreboardRepositoryImpl(
     }
 
     override fun getOfflineScoreboardForTournament(tournament: Tournament): List<Match> {
-        val cached = MatchCacheManager.loadMatches(appContext)
-        return sortMatches(filterMatches(cached, tournament))
+        val cached = MatchCacheManager.loadMatches(appContext).ifEmpty {
+            MockTournamentData.matches
+        }
+        val filtered = if (tournament == Tournaments.ALL) cached else filterMatches(cached, tournament)
+        return sortMatches(filtered)
     }
 
     private fun filterMatches(matches: List<Match>, tournament: Tournament): List<Match> {

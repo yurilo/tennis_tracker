@@ -11,6 +11,7 @@ import com.tennis.tracker.data.repository.ScoreboardRepositoryImpl
 import com.tennis.tracker.domain.model.Match
 import com.tennis.tracker.domain.model.MatchState
 import com.tennis.tracker.domain.model.MatchStatistics
+import com.tennis.tracker.domain.model.Tournaments
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -204,5 +205,36 @@ class ScoreboardRepositoryTest {
         repository.clearStatsCache()
         repository.getMatchStatistics(finishedMatch)
         assertEquals("After cache clear, should query stats API again", 2, apiFetchCount)
+    }
+
+    @Test
+    fun `getScoreboardForTournament with zero matches on network succeeds with emptyList without failing`() = runBlocking {
+        val dummyEmptyApi = object : EspnScoreboardApi() {
+            override fun fetchScoreboard(url: String, tournament: com.tennis.tracker.domain.model.Tournament?): Result<List<Match>> =
+                Result.success(emptyList())
+        }
+        val repository = ScoreboardRepositoryImpl(
+            context = null,
+            api = dummyEmptyApi
+        )
+        // Querying a tournament with 0 scheduled matches must return Result.success(emptyList()) instead of failing
+        val result = repository.getScoreboardForTournament(Tournaments.US_OPEN, forceRefresh = true)
+        assertTrue("Query should succeed even when 0 matches currently scheduled", result.isSuccess)
+        assertEquals(0, result.getOrNull()?.size)
+    }
+
+    @Test
+    fun `TennisStatsApi circuit breaker prevents repeated calls when tripped`() {
+        val statsApi = TennisStatsApi()
+        val match = MockTournamentData.matches.first { it.state == MatchState.LIVE }
+
+        // Manually trip the circuit breaker
+        TennisStatsApi.sofaScoreBlockedUntil = System.currentTimeMillis() + 60_000L
+
+        val scores = statsApi.fetchLiveGameScores(listOf(match))
+        assertTrue("Must immediately return emptyMap without performing network requests when circuit breaker is active", scores.isEmpty())
+
+        // Reset circuit breaker
+        TennisStatsApi.sofaScoreBlockedUntil = 0L
     }
 }

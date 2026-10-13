@@ -418,6 +418,30 @@ class TieredFilterViewModelTest {
         assertTrue(wtaDefaults.size > 1)
     }
 
+    @Test
+    fun testViewModel_computeContextualTournaments_showsOnlyActiveTournamentsWhenMatchesExist() {
+        val shanghai = Tournaments.SHANGHAI_MASTERS
+        val wuhan = Tournaments.WUHAN_OPEN
+        val activeMatches = listOf(
+            createSampleMatch("m_shanghai_1", shanghai, MatchState.LIVE, "Jannik Sinner", "Carlos Alcaraz", "Men's Singles"),
+            createSampleMatch("m_wuhan_1", wuhan, MatchState.LIVE, "Aryna Sabalenka", "Coco Gauff", "Ladies Singles")
+        )
+
+        // For ALL tier, must show ONLY [All Tournaments, Shanghai, Wuhan] without 50+ canonicals
+        val contextualAll = ScoreboardViewModel.computeContextualTournaments(activeMatches, TourTierFilter.ALL)
+        assertEquals(3, contextualAll.size)
+        assertEquals("all", contextualAll[0].id)
+        assertEquals("shanghai_masters", contextualAll[1].id)
+        assertEquals("wuhan_open", contextualAll[2].id)
+        assertFalse("Must not flood list with US Open when active matches exist", contextualAll.any { it.id == "us_open" })
+        assertFalse("Must not flood list with Wimbledon when active matches exist", contextualAll.any { it.id == "wimbledon" })
+
+        // When a specific inactive tournament is currently selected, it must be included so chip remains selected
+        val contextualWithSelected = ScoreboardViewModel.computeContextualTournaments(activeMatches, TourTierFilter.ALL, Tournaments.US_OPEN)
+        assertEquals(4, contextualWithSelected.size)
+        assertTrue(contextualWithSelected.any { it.id == "us_open" })
+    }
+
     private fun createSampleMatch(
         id: String,
         tournament: Tournament,

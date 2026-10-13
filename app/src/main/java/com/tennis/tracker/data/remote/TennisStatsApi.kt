@@ -26,6 +26,16 @@ open class TennisStatsApi(
         private const val US_OPEN_WTA_TOURNAMENT = "196857"
         private const val US_OPEN_WTA_SEASON = "85958"
         private val TOKEN_DELIMITER_REGEX = Regex("[\\s/.-]+")
+        @Volatile
+        var sofaScoreBlockedUntil: Long = 0L
+        private const val BLOCKED_COOLDOWN_MS = 15 * 60 * 1000L // 15 minutes
+    }
+
+    private val liveScoreClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .build()
     }
 
     open fun fetchStatistics(match: Match): Result<MatchStatistics> {
@@ -244,6 +254,11 @@ open class TennisStatsApi(
         val liveMatches = matches.filter { it.state == MatchState.LIVE }
         if (liveMatches.isEmpty()) return emptyMap()
 
+        val now = System.currentTimeMillis()
+        if (now < sofaScoreBlockedUntil) {
+            return emptyMap()
+        }
+
         return try {
             val request = Request.Builder()
                 .url("$SOFASCORE_BASE/sport/tennis/events/live")
@@ -251,8 +266,13 @@ open class TennisStatsApi(
                 .header("Referer", "https://www.sofascore.com/")
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return emptyMap()
+            val response = liveScoreClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                if (response.code == 403 || response.code == 429) {
+                    sofaScoreBlockedUntil = System.currentTimeMillis() + BLOCKED_COOLDOWN_MS
+                }
+                return emptyMap()
+            }
             val body = response.body?.string() ?: return emptyMap()
             val root = JSONObject(body)
             val events = root.optJSONArray("events") ?: return emptyMap()
@@ -329,6 +349,7 @@ open class TennisStatsApi(
             }
             scoreMap
         } catch (_: Throwable) {
+            sofaScoreBlockedUntil = System.currentTimeMillis() + (5 * 60 * 1000L)
             emptyMap()
         }
     }
