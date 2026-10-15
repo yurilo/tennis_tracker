@@ -145,4 +145,40 @@ class AdaptiveLayoutUtilsTest {
         assertEquals(1, negativeConfig.screenHeightDp)
         assertEquals(FormFactor.PHONE, negativeConfig.formFactor)
     }
+
+    @Test
+    fun testFoldableDevices_foldedCoverVsUnfoldedInnerScreens() {
+        // Foldable cover screen (Folded: tall, narrow phone)
+        val foldedCoverScreen = AdaptiveLayoutUtils.computeConfig(340, 840)
+        assertEquals(FormFactor.PHONE, foldedCoverScreen.formFactor)
+        assertTrue(foldedCoverScreen.isPhone)
+        assertFalse(foldedCoverScreen.isLaptop)
+        assertEquals(1, foldedCoverScreen.gridColumnCount)
+        assertTrue(foldedCoverScreen.isCompactButtons)
+
+        // Foldable main screen (Unfolded: tablet/square canvas)
+        val unfoldedMainScreen = AdaptiveLayoutUtils.computeConfig(700, 800)
+        assertEquals(FormFactor.LAPTOP, unfoldedMainScreen.formFactor)
+        assertFalse(unfoldedMainScreen.isPhone)
+        assertTrue(unfoldedMainScreen.isLaptop)
+        assertEquals(2, unfoldedMainScreen.gridColumnCount)
+        assertEquals(1280.dp, unfoldedMainScreen.maxContentWidth)
+    }
+
+    @Test
+    fun testDirectHelperMethods_resolveWindowWidthSizeAndFormFactor() {
+        // Direct WindowWidthSize resolution
+        assertEquals(WindowWidthSize.COMPACT, AdaptiveLayoutUtils.resolveWindowWidthSize(320))
+        assertEquals(WindowWidthSize.COMPACT, AdaptiveLayoutUtils.resolveWindowWidthSize(599))
+        assertEquals(WindowWidthSize.MEDIUM, AdaptiveLayoutUtils.resolveWindowWidthSize(600))
+        assertEquals(WindowWidthSize.MEDIUM, AdaptiveLayoutUtils.resolveWindowWidthSize(839))
+        assertEquals(WindowWidthSize.EXPANDED, AdaptiveLayoutUtils.resolveWindowWidthSize(840))
+        assertEquals(WindowWidthSize.EXPANDED, AdaptiveLayoutUtils.resolveWindowWidthSize(1920))
+
+        // Direct FormFactor resolution
+        assertEquals(FormFactor.PHONE, AdaptiveLayoutUtils.resolveFormFactor(360))
+        assertEquals(FormFactor.PHONE, AdaptiveLayoutUtils.resolveFormFactor(599))
+        assertEquals(FormFactor.LAPTOP, AdaptiveLayoutUtils.resolveFormFactor(600))
+        assertEquals(FormFactor.LAPTOP, AdaptiveLayoutUtils.resolveFormFactor(1200))
+    }
 }
