@@ -4,7 +4,7 @@ A modern Android application for tracking ATP Tour, WTA Tour, and Grand Slam ten
 
 [![Latest Release](https://img.shields.io/github/v/release/yurilo/tennis_tracker?label=Download%20APK&color=brightgreen)](https://github.com/yurilo/tennis_tracker/releases/latest)
 
-📥 **[Download Latest APK (v1.0.23)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.23/TennisTracker-v1.0.23.apk)**
+📥 **[Download Latest APK (v1.0.24)](https://github.com/yurilo/tennis_tracker/releases/download/v1.0.24/TennisTracker-v1.0.24.apk)**
 
 ---
 

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -222,29 +223,31 @@ fun ScoreboardScreen(
                             tint = Color.White
                         )
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable { showSettingsSheet = true }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Box(
+                    if (!layoutConfig.isPhone) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(6.dp)
-                                .background(
-                                    if (settings.autoRefreshInterval.isEnabled) UsOpenGold else Color.Gray,
-                                    androidx.compose.foundation.shape.CircleShape
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = settings.autoRefreshInterval.badgeLabel,
-                            fontSize = 11.sp,
-                            color = Color.White,
-                            fontWeight = FontWeight.Medium
-                        )
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .clickable { showSettingsSheet = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(
+                                        if (settings.autoRefreshInterval.isEnabled) UsOpenGold else Color.Gray,
+                                        androidx.compose.foundation.shape.CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = settings.autoRefreshInterval.badgeLabel,
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                     IconButton(onClick = { viewModel.loadMatches(forceRefresh = true) }) {
                         Icon(
@@ -269,10 +272,10 @@ fun ScoreboardScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxHeight()
                     .then(
                         if (layoutConfig.maxContentWidth != null) {
-                            Modifier.widthIn(max = layoutConfig.maxContentWidth)
+                            Modifier.widthIn(max = layoutConfig.maxContentWidth).fillMaxWidth()
                         } else {
                             Modifier.fillMaxWidth()
                         }
@@ -354,7 +357,7 @@ fun ScoreboardScreen(
             // Content Area: Loading, Empty, or Match List/Grid
             if (state.isLoading && state.allMatches.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -368,7 +371,7 @@ fun ScoreboardScreen(
                 }
             } else if (state.filteredMatches.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -442,7 +445,7 @@ fun ScoreboardScreen(
                 // Laptop / Tablet Form Factor: Adaptive Multi-column Grid
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(layoutConfig.gridColumnCount),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         start = layoutConfig.horizontalScreenPadding,
                         end = layoutConfig.horizontalScreenPadding,
@@ -484,7 +487,7 @@ fun ScoreboardScreen(
             } else {
                 // Phone Form Factor: Single-column feed with compact full-width cards
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
                 ) {
                     items(

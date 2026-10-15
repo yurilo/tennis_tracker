@@ -13,8 +13,8 @@ android {
         applicationId = "com.tennis.tracker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "1.0.23"
+        versionCode = 25
+        versionName = "1.0.24"
         setProperty("archivesBaseName", "TennisTracker")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -107,7 +107,7 @@ fun MatchCard(
             .padding(horizontal = cardOuterHPadding, vertical = cardOuterVPadding)
             .clip(RoundedCornerShape(14.dp))
             .combinedClickable(
-                onClick = { /* card click */ },
+                onClick = { onStatsClick(match) },
                 onLongClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     if (onCopyClick != null) {
@@ -293,7 +293,8 @@ fun MatchCard(
                     competitor = match.player1,
                     opponent = match.player2,
                     isLive = match.state == MatchState.LIVE,
-                    isPhone = layoutConfig.isPhone
+                    isPhone = layoutConfig.isPhone,
+                    onCardClick = { onStatsClick(match) }
                 )
 
                 Spacer(modifier = Modifier.height(if (layoutConfig.isPhone) 6.dp else 8.dp))
@@ -303,7 +304,8 @@ fun MatchCard(
                     competitor = match.player2,
                     opponent = match.player1,
                     isLive = match.state == MatchState.LIVE,
-                    isPhone = layoutConfig.isPhone
+                    isPhone = layoutConfig.isPhone,
+                    onCardClick = { onStatsClick(match) }
                 )
 
                 Spacer(modifier = Modifier.height(if (layoutConfig.isPhone) 10.dp else 14.dp))
@@ -493,7 +495,8 @@ private fun CompetitorRow(
     competitor: Competitor,
     opponent: Competitor,
     isLive: Boolean,
-    isPhone: Boolean = false
+    isPhone: Boolean = false,
+    onCardClick: () -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -510,11 +513,11 @@ private fun CompetitorRow(
                 .clip(RoundedCornerShape(6.dp))
                 .combinedClickable(
                     onClick = {
-                        Toast.makeText(
-                            context,
-                            "${competitor.displayNameWithSeed} (Hold to copy name)",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        try {
+                            com.tennis.tracker.util.IntentLauncher.launchPlayerProfile(context, competitor)
+                        } catch (_: Throwable) {
+                            onCardClick()
+                        }
                     },
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -567,7 +570,7 @@ private fun CompetitorRow(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
                 .combinedClickable(
-                    onClick = { /* score tap */ },
+                    onClick = onCardClick,
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         val setStr = competitor.setScores.joinToString(" ")
