@@ -71,6 +71,8 @@ import com.tennis.tracker.ui.theme.UsOpenNavy
 import com.tennis.tracker.ui.theme.UsOpenNavyDark
 import com.tennis.tracker.ui.theme.UsOpenTennisGreen
 import com.tennis.tracker.ui.theme.TennisVoltYellow
+import com.tennis.tracker.ui.util.FormFactorLayoutConfig
+import com.tennis.tracker.ui.util.rememberFormFactorLayoutConfig
 import com.tennis.tracker.util.ClipboardHelper
 import com.tennis.tracker.util.CopyTextFormatter
 
@@ -85,6 +87,7 @@ fun MatchCard(
     isFollowed: Boolean = false,
     onFollowClick: ((Match) -> Unit)? = null,
     onCopyClick: ((Match) -> Unit)? = null,
+    layoutConfig: FormFactorLayoutConfig = rememberFormFactorLayoutConfig(),
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -94,10 +97,14 @@ fun MatchCard(
     val cardBorderColor = if (isDark) Color(0xFF334155).copy(alpha = 0.6f) else CardBorder
     var showInternalCopySheet by remember { mutableStateOf(false) }
 
+    val cardOuterHPadding = if (layoutConfig.isPhone) 12.dp else 0.dp
+    val cardOuterVPadding = if (layoutConfig.isPhone) 6.dp else 0.dp
+    val cardInnerPadding = if (layoutConfig.isPhone) 12.dp else 16.dp
+
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = cardOuterHPadding, vertical = cardOuterVPadding)
             .clip(RoundedCornerShape(14.dp))
             .combinedClickable(
                 onClick = { /* card click */ },
@@ -120,7 +127,7 @@ fun MatchCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(cardInnerPadding)
         ) {
             // Header: Grouping, Round, Venue, Timing, Copy, Follow Button & Status Badge
             val courtInfo = match.displayCourt
@@ -279,32 +286,38 @@ fun MatchCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (layoutConfig.isPhone) 6.dp else 8.dp))
 
                 // Player 1 Row
                 CompetitorRow(
                     competitor = match.player1,
                     opponent = match.player2,
-                    isLive = match.state == MatchState.LIVE
+                    isLive = match.state == MatchState.LIVE,
+                    isPhone = layoutConfig.isPhone
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (layoutConfig.isPhone) 6.dp else 8.dp))
 
                 // Player 2 Row
                 CompetitorRow(
                     competitor = match.player2,
                     opponent = match.player1,
-                    isLive = match.state == MatchState.LIVE
+                    isLive = match.state == MatchState.LIVE,
+                    isPhone = layoutConfig.isPhone
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(if (layoutConfig.isPhone) 10.dp else 14.dp))
 
                 // Action Buttons: H2H + Stats (on demand) + Watch on ESPN + Highlights (completed matches)
                 val isFinished = match.state == MatchState.FINISHED
+                val btnFontSize = if (layoutConfig.isCompactButtons) 11.sp else 12.sp
+                val btnPadding = if (layoutConfig.isCompactButtons) 2.dp else 4.dp
+                val btnIconSize = if (layoutConfig.isCompactButtons) 13.dp else 15.dp
+
                 DisableSelection {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(if (layoutConfig.isCompactButtons) 4.dp else 6.dp)
                     ) {
                 if (onH2HClick != null) {
                     OutlinedButton(
@@ -315,12 +328,12 @@ fun MatchCard(
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = statsButtonColor
                         ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = btnPadding)
                     ) {
                         Text(
                             text = "H2H",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
+                            fontSize = btnFontSize,
                             color = statsButtonColor
                         )
                     }
@@ -335,19 +348,19 @@ fun MatchCard(
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = statsButtonColor
                         ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = btnPadding)
                     ) {
                         Icon(
                             imageVector = Icons.Default.BarChart,
                             contentDescription = null,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(btnIconSize),
                             tint = statsButtonColor
                         )
-                        Spacer(modifier = Modifier.width(3.dp))
+                        Spacer(modifier = Modifier.width(if (layoutConfig.isCompactButtons) 2.dp else 3.dp))
                         Text(
                             text = "Stats",
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
+                            fontSize = btnFontSize,
                             color = statsButtonColor
                         )
                     }
@@ -359,7 +372,7 @@ fun MatchCard(
                         onClick = { onWatchClick(match.deepLink) },
                         modifier = Modifier.weight(if (isFinished) 1.05f else 1.2f),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = btnPadding),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = when {
                                 match.state == MatchState.LIVE -> EspnRed
@@ -371,14 +384,14 @@ fun MatchCard(
                         Icon(
                             imageVector = if (match.state == MatchState.LIVE) Icons.Default.PlayArrow else Icons.Default.Tv,
                             contentDescription = null,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(btnIconSize),
                             tint = Color.White
                         )
-                        Spacer(modifier = Modifier.width(3.dp))
+                        Spacer(modifier = Modifier.width(if (layoutConfig.isCompactButtons) 2.dp else 3.dp))
                         Text(
                             text = watchLabel,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
+                            fontSize = btnFontSize,
                             color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -391,7 +404,7 @@ fun MatchCard(
                         onClick = { onHighlightsClick(match) },
                         modifier = Modifier.weight(1.15f),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = btnPadding),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFFF0000)
                         )
@@ -399,14 +412,14 @@ fun MatchCard(
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = "Watch Highlights",
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(btnIconSize),
                             tint = Color.White
                         )
-                        Spacer(modifier = Modifier.width(3.dp))
+                        Spacer(modifier = Modifier.width(if (layoutConfig.isCompactButtons) 2.dp else 3.dp))
                         Text(
                             text = "Highlights",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
+                            fontSize = btnFontSize,
                             color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -479,7 +492,8 @@ private fun isValidTennisScore(score: String?): Boolean {
 private fun CompetitorRow(
     competitor: Competitor,
     opponent: Competitor,
-    isLive: Boolean
+    isLive: Boolean,
+    isPhone: Boolean = false
 ) {
     val isDark = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -519,7 +533,7 @@ private fun CompetitorRow(
             if (isLive && competitor.isServing) {
                 Text(
                     text = "🎾",
-                    fontSize = 13.sp,
+                    fontSize = if (isPhone) 12.sp else 13.sp,
                     modifier = Modifier.padding(end = 4.dp)
                 )
             }
@@ -528,13 +542,14 @@ private fun CompetitorRow(
                     text = "✓",
                     color = UsOpenTennisGreen,
                     fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
+                    fontSize = if (isPhone) 13.sp else 14.sp,
                     modifier = Modifier.padding(end = 4.dp)
                 )
             }
             Text(
                 text = competitor.displayNameWithSeed,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (isPhone) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontSize = if (isPhone) 14.5.sp else 16.sp,
                 fontWeight = if (competitor.isWinner || isLive) FontWeight.Bold else FontWeight.Medium,
                 color = when {
                     competitor.isWinner -> if (isDark) UsOpenGold else UsOpenNavy
@@ -547,7 +562,7 @@ private fun CompetitorRow(
 
         // Set scores and Tiebreaks
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isPhone) 6.dp else 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
@@ -588,7 +603,7 @@ private fun CompetitorRow(
                         withStyle(
                             SpanStyle(
                                 baselineShift = BaselineShift.Superscript,
-                                fontSize = 10.sp,
+                                fontSize = if (isPhone) 9.sp else 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                             )
@@ -600,10 +615,10 @@ private fun CompetitorRow(
 
                 Text(
                     text = annotatedScore,
-                    fontSize = 14.sp,
+                    fontSize = if (isPhone) 13.5.sp else 14.sp,
                     fontWeight = if (competitor.isWinner || score > oppScore) FontWeight.Bold else FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.defaultMinSize(minWidth = 20.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = if (isPhone) 18.dp else 20.dp),
                     textAlign = TextAlign.Center
                 )
             }

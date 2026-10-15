@@ -16,8 +16,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -71,6 +76,9 @@ import com.tennis.tracker.ui.theme.EspnRed
 import com.tennis.tracker.ui.theme.UsOpenGold
 import com.tennis.tracker.ui.theme.UsOpenNavy
 import com.tennis.tracker.ui.theme.UsOpenNavyDark
+import com.tennis.tracker.ui.util.AdaptiveLayoutUtils
+import com.tennis.tracker.ui.util.FormFactorLayoutConfig
+import com.tennis.tracker.ui.util.rememberFormFactorLayoutConfig
 import com.tennis.tracker.ui.viewmodel.MatchFilter
 import com.tennis.tracker.ui.viewmodel.ScoreboardViewModel
 import com.tennis.tracker.ui.viewmodel.TourTierFilter
@@ -90,6 +98,7 @@ fun ScoreboardScreen(
     val selectedMatchForH2H by viewModel.selectedMatchForH2H.collectAsState()
     val h2hUiState by viewModel.h2hUiState.collectAsState()
     val context = LocalContext.current
+    val layoutConfig = rememberFormFactorLayoutConfig()
 
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -129,32 +138,36 @@ fun ScoreboardScreen(
                             text = "TENNIS",
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp,
+                            fontSize = if (layoutConfig.isPhone) 17.sp else 20.sp,
                             color = Color.White
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "TRACKER",
                             fontWeight = FontWeight.Light,
                             letterSpacing = 1.sp,
+                            fontSize = if (layoutConfig.isPhone) 17.sp else 20.sp,
                             color = UsOpenGold
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable { showAboutDialog = true }
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "v$appVersion",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.95f)
-                            )
+                        if (!layoutConfig.isPhone) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.White.copy(alpha = 0.15f))
+                                    .clickable { showAboutDialog = true }
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "v$appVersion",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.95f)
+                                )
+                            }
                         }
                         if (state.liveCount > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(if (layoutConfig.isPhone) 4.dp else 8.dp))
                             Box(
                                 modifier = Modifier
                                     .background(EspnRed, RoundedCornerShape(10.dp))
@@ -180,23 +193,25 @@ fun ScoreboardScreen(
                             tint = UsOpenGold
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            val requested = FollowedMatchesWidgetProvider.requestPinWidget(context)
-                            if (!requested) {
-                                Toast.makeText(
-                                    context,
-                                    "To add the widget, touch & hold your home screen and choose 'Tennis Watchlist'",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                    if (!layoutConfig.isPhone) {
+                        IconButton(
+                            onClick = {
+                                val requested = FollowedMatchesWidgetProvider.requestPinWidget(context)
+                                if (!requested) {
+                                    Toast.makeText(
+                                        context,
+                                        "To add the widget, touch & hold your home screen and choose 'Tennis Watchlist'",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
                             }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Widgets,
+                                contentDescription = "Pin Widget to Desktop",
+                                tint = UsOpenGold
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Widgets,
-                            contentDescription = "Pin Widget to Desktop",
-                            tint = UsOpenGold
-                        )
                     }
                     IconButton(
                         onClick = { showSettingsSheet = true }
@@ -245,12 +260,24 @@ fun ScoreboardScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (layoutConfig.maxContentWidth != null) {
+                            Modifier.widthIn(max = layoutConfig.maxContentWidth)
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
+                    )
+            ) {
             // Offline Indicator Banner if applicable
             if (state.isOffline) {
                 Row(
@@ -281,20 +308,23 @@ fun ScoreboardScreen(
                 query = state.searchQuery,
                 onQueryChange = { viewModel.onSearchQueryChange(it) },
                 onClearQuery = { viewModel.clearSearchQuery() },
-                resultCount = state.filteredMatches.size
+                resultCount = state.filteredMatches.size,
+                horizontalPadding = layoutConfig.horizontalScreenPadding
             )
 
             // 1. Tour Tier Filter Chips Row
             TourTierChipsRow(
                 selectedTier = state.selectedTierFilter,
-                onTierSelected = { viewModel.selectTierFilter(it) }
+                onTierSelected = { viewModel.selectTierFilter(it) },
+                horizontalPadding = layoutConfig.horizontalScreenPadding
             )
 
             // 2. Contextual Active Tournament Chips Row
             ContextualTournamentChipsRow(
                 currentTournament = state.currentTournament,
                 tournaments = state.contextualTournaments.ifEmpty { state.availableTournaments },
-                onTournamentSelected = { viewModel.selectTournament(it) }
+                onTournamentSelected = { viewModel.selectTournament(it) },
+                horizontalPadding = layoutConfig.horizontalScreenPadding
             )
 
             // Scoped matches count for match status filters
@@ -317,10 +347,11 @@ fun ScoreboardScreen(
                 followedCount = scopedMatches.count { it.id in state.followedMatchIds },
                 upcomingCount = scopedMatches.count { it.state == MatchState.UPCOMING },
                 finishedCount = scopedMatches.count { it.state == MatchState.FINISHED },
+                horizontalPadding = layoutConfig.horizontalScreenPadding,
                 onFilterSelected = { viewModel.setFilter(it) }
             )
 
-            // Content Area: Loading, Empty, or Match List
+            // Content Area: Loading, Empty, or Match List/Grid
             if (state.isLoading && state.allMatches.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -407,7 +438,51 @@ fun ScoreboardScreen(
                         }
                     }
                 }
+            } else if (layoutConfig.gridColumnCount > 1) {
+                // Laptop / Tablet Form Factor: Adaptive Multi-column Grid
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(layoutConfig.gridColumnCount),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        start = layoutConfig.horizontalScreenPadding,
+                        end = layoutConfig.horizontalScreenPadding,
+                        top = 8.dp,
+                        bottom = 32.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(layoutConfig.cardSpacing),
+                    verticalArrangement = Arrangement.spacedBy(layoutConfig.cardSpacing)
+                ) {
+                    items(
+                        items = state.filteredMatches,
+                        key = { it.id }
+                    ) { match ->
+                        MatchCard(
+                            match = match,
+                            isFollowed = state.followedMatchIds.contains(match.id),
+                            onFollowClick = { matchToToggle ->
+                                viewModel.toggleFollow(context, matchToToggle.id)
+                            },
+                            onWatchClick = { _ ->
+                                viewModel.launchWatch(context, match)
+                            },
+                            onHighlightsClick = { matchToHighlight ->
+                                viewModel.launchHighlights(context, matchToHighlight)
+                            },
+                            onStatsClick = { matchToInspect ->
+                                viewModel.openMatchStats(matchToInspect)
+                            },
+                            onH2HClick = { matchToInspect ->
+                                viewModel.openH2H(matchToInspect)
+                            },
+                            onCopyClick = { matchToCopy ->
+                                selectedMatchForCopy = matchToCopy
+                            },
+                            layoutConfig = layoutConfig
+                        )
+                    }
+                }
             } else {
+                // Phone Form Factor: Single-column feed with compact full-width cards
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
@@ -436,12 +511,14 @@ fun ScoreboardScreen(
                             },
                             onCopyClick = { matchToCopy ->
                                 selectedMatchForCopy = matchToCopy
-                            }
+                            },
+                            layoutConfig = layoutConfig
                         )
                     }
                 }
             }
         }
+    }
     }
 
     // Modal Bottom Sheet for Copy & Sharing (shown on-demand)
@@ -629,6 +706,7 @@ private fun SearchBarSection(
     onQueryChange: (String) -> Unit,
     onClearQuery: () -> Unit,
     resultCount: Int,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -637,7 +715,7 @@ private fun SearchBarSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = horizontalPadding, vertical = 6.dp)
     ) {
         OutlinedTextField(
             value = query,
@@ -702,6 +780,7 @@ private fun FilterChipsRow(
     followedCount: Int,
     upcomingCount: Int,
     finishedCount: Int,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     onFilterSelected: (MatchFilter) -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
@@ -720,7 +799,7 @@ private fun FilterChipsRow(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = horizontalPadding, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         for ((filter, count) in filters) {
@@ -747,6 +826,7 @@ private fun FilterChipsRow(
 fun TourTierChipsRow(
     selectedTier: TourTierFilter,
     onTierSelected: (TourTierFilter) -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -757,7 +837,7 @@ fun TourTierChipsRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = horizontalPadding, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -789,6 +869,7 @@ fun ContextualTournamentChipsRow(
     currentTournament: com.tennis.tracker.domain.model.Tournament,
     tournaments: List<com.tennis.tracker.domain.model.Tournament>,
     onTournamentSelected: (com.tennis.tracker.domain.model.Tournament) -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     modifier: Modifier = Modifier
 ) {
     val isDark = isSystemInDarkTheme()
@@ -799,7 +880,7 @@ fun ContextualTournamentChipsRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 2.dp),
+            .padding(horizontal = horizontalPadding, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -835,12 +916,14 @@ fun ContextualTournamentChipsRow(
 private fun TournamentChipsRow(
     currentTournament: com.tennis.tracker.domain.model.Tournament,
     tournaments: List<com.tennis.tracker.domain.model.Tournament>,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
     onTournamentSelected: (com.tennis.tracker.domain.model.Tournament) -> Unit
 ) {
     ContextualTournamentChipsRow(
         currentTournament = currentTournament,
         tournaments = tournaments,
-        onTournamentSelected = onTournamentSelected
+        onTournamentSelected = onTournamentSelected,
+        horizontalPadding = horizontalPadding
     )
 }
 
