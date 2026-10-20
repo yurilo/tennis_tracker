@@ -61,6 +61,7 @@ data class ScoreboardUiState(
     val currentTournament: Tournament = Tournaments.ALL,
     val availableTournaments: List<Tournament> = Tournaments.POPULAR_TOURNAMENTS,
     val selectedTierFilter: TourTierFilter = TourTierFilter.ALL,
+    val selectedMatchTypeFilter: MatchTypeFilter = MatchTypeFilter.ALL,
     val contextualTournaments: List<Tournament> = emptyList()
 )
 
@@ -104,12 +105,14 @@ class ScoreboardViewModel(
                 allMatches = initialMatches,
                 currentTournament = initialTournament,
                 selectedTierFilter = initialTier,
+                selectedMatchTypeFilter = MatchTypeFilter.ALL,
                 contextualTournaments = initialContextual,
                 availableTournaments = initialContextual,
                 filteredMatches = applyFilterAndSearch(
                     matches = initialMatches,
                     tier = initialTier,
                     tournament = initialTournament,
+                    matchType = MatchTypeFilter.ALL,
                     filter = MatchFilter.ALL,
                     query = "",
                     followedIds = emptySet()
@@ -292,6 +295,7 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = state.selectedTierFilter,
                     tournament = state.currentTournament,
+                    matchType = state.selectedMatchTypeFilter,
                     filter = state.selectedFilter,
                     query = state.searchQuery,
                     followedIds = ids
@@ -357,6 +361,7 @@ class ScoreboardViewModel(
                         matches = matches,
                         tier = state.selectedTierFilter,
                         tournament = state.currentTournament,
+                        matchType = state.selectedMatchTypeFilter,
                         filter = state.selectedFilter,
                         query = state.searchQuery,
                         followedIds = followedIds
@@ -400,6 +405,7 @@ class ScoreboardViewModel(
                             matches = matches,
                             tier = state.selectedTierFilter,
                             tournament = state.currentTournament,
+                            matchType = state.selectedMatchTypeFilter,
                             filter = state.selectedFilter,
                             query = state.searchQuery,
                             followedIds = followedIds
@@ -438,6 +444,7 @@ class ScoreboardViewModel(
                             matches = fallback,
                             tier = state.selectedTierFilter,
                             tournament = state.currentTournament,
+                            matchType = state.selectedMatchTypeFilter,
                             filter = state.selectedFilter,
                             query = state.searchQuery,
                             followedIds = followedIds
@@ -460,6 +467,7 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = state.selectedTierFilter,
                     tournament = state.currentTournament,
+                    matchType = state.selectedMatchTypeFilter,
                     filter = state.selectedFilter,
                     query = query,
                     followedIds = state.followedMatchIds
@@ -484,6 +492,7 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = state.selectedTierFilter,
                     tournament = tournament,
+                    matchType = state.selectedMatchTypeFilter,
                     filter = state.selectedFilter,
                     query = state.searchQuery,
                     followedIds = state.followedMatchIds
@@ -497,8 +506,14 @@ class ScoreboardViewModel(
             val newTournament = getTierAllTournament(tier)
             val contextual = computeContextualTournaments(state.allMatches, tier, newTournament)
             repository.setActiveTournament(newTournament)
+            val adjustedMatchType = when {
+                tier == TourTierFilter.ATP_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.WTA -> MatchTypeFilter.ALL
+                tier == TourTierFilter.WTA_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.ATP -> MatchTypeFilter.ALL
+                else -> state.selectedMatchTypeFilter
+            }
             state.copy(
                 selectedTierFilter = tier,
+                selectedMatchTypeFilter = adjustedMatchType,
                 currentTournament = newTournament,
                 contextualTournaments = contextual,
                 availableTournaments = contextual,
@@ -506,6 +521,24 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = tier,
                     tournament = newTournament,
+                    matchType = adjustedMatchType,
+                    filter = state.selectedFilter,
+                    query = state.searchQuery,
+                    followedIds = state.followedMatchIds
+                )
+            )
+        }
+    }
+
+    fun selectMatchTypeFilter(matchType: MatchTypeFilter) {
+        _uiState.update { state ->
+            state.copy(
+                selectedMatchTypeFilter = matchType,
+                filteredMatches = applyFilterAndSearch(
+                    matches = state.allMatches,
+                    tier = state.selectedTierFilter,
+                    tournament = state.currentTournament,
+                    matchType = matchType,
                     filter = state.selectedFilter,
                     query = state.searchQuery,
                     followedIds = state.followedMatchIds
@@ -522,6 +555,7 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = state.selectedTierFilter,
                     tournament = state.currentTournament,
+                    matchType = state.selectedMatchTypeFilter,
                     filter = filter,
                     query = state.searchQuery,
                     followedIds = state.followedMatchIds
@@ -599,6 +633,7 @@ class ScoreboardViewModel(
         matches: List<Match>,
         tier: TourTierFilter = _uiState.value.selectedTierFilter,
         tournament: Tournament = _uiState.value.currentTournament,
+        matchType: MatchTypeFilter = _uiState.value.selectedMatchTypeFilter,
         filter: MatchFilter = _uiState.value.selectedFilter,
         query: String = _uiState.value.searchQuery,
         followedIds: Set<String> = _uiState.value.followedMatchIds
@@ -621,16 +656,23 @@ class ScoreboardViewModel(
             }
         }
 
-        // Stage 3: Match status filter
-        val statusFiltered = when (filter) {
-            MatchFilter.ALL -> tournamentFiltered
-            MatchFilter.LIVE -> tournamentFiltered.filter { it.state == MatchState.LIVE }
-            MatchFilter.FOLLOWED -> tournamentFiltered.filter { it.id in followedIds }
-            MatchFilter.UPCOMING -> tournamentFiltered.filter { it.state == MatchState.UPCOMING }
-            MatchFilter.FINISHED -> tournamentFiltered.filter { it.state == MatchState.FINISHED }
+        // Stage 3: Match type filter (ATP / WTA / Singles / Doubles)
+        val matchTypeFiltered = if (matchType == MatchTypeFilter.ALL) {
+            tournamentFiltered
+        } else {
+            tournamentFiltered.filter { match -> matchType.matches(match) }
         }
 
-        // Stage 4: Search query filter
+        // Stage 4: Match status filter
+        val statusFiltered = when (filter) {
+            MatchFilter.ALL -> matchTypeFiltered
+            MatchFilter.LIVE -> matchTypeFiltered.filter { it.state == MatchState.LIVE }
+            MatchFilter.FOLLOWED -> matchTypeFiltered.filter { it.id in followedIds }
+            MatchFilter.UPCOMING -> matchTypeFiltered.filter { it.state == MatchState.UPCOMING }
+            MatchFilter.FINISHED -> matchTypeFiltered.filter { it.state == MatchState.FINISHED }
+        }
+
+        // Stage 5: Search query filter
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
             return statusFiltered
@@ -650,6 +692,7 @@ class ScoreboardViewModel(
         matches = matches,
         tier = _uiState.value.selectedTierFilter,
         tournament = _uiState.value.currentTournament,
+        matchType = _uiState.value.selectedMatchTypeFilter,
         filter = filter,
         query = query,
         followedIds = followedIds

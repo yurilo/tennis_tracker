@@ -81,6 +81,7 @@ import com.tennis.tracker.ui.util.AdaptiveLayoutUtils
 import com.tennis.tracker.ui.util.FormFactorLayoutConfig
 import com.tennis.tracker.ui.util.rememberFormFactorLayoutConfig
 import com.tennis.tracker.ui.viewmodel.MatchFilter
+import com.tennis.tracker.ui.viewmodel.MatchTypeFilter
 import com.tennis.tracker.ui.viewmodel.ScoreboardViewModel
 import com.tennis.tracker.ui.viewmodel.TourTierFilter
 import com.tennis.tracker.ui.widget.FollowedMatchesWidgetProvider
@@ -330,8 +331,8 @@ fun ScoreboardScreen(
                 horizontalPadding = layoutConfig.horizontalScreenPadding
             )
 
-            // Scoped matches count for match status filters
-            val scopedMatches = remember(state.allMatches, state.selectedTierFilter, state.currentTournament) {
+            // Matches scoped by Stage 1 (Tour Tier) and Stage 2 (Contextual Tournament)
+            val tournamentScopedMatches = remember(state.allMatches, state.selectedTierFilter, state.currentTournament) {
                 state.allMatches.filter { match ->
                     state.selectedTierFilter.matches(match.tournament, match) &&
                         (state.currentTournament.id.equals("all", ignoreCase = true) ||
@@ -342,7 +343,30 @@ fun ScoreboardScreen(
                 }
             }
 
-            // 3. Filter Chips Row
+            val matchTypeCounts = remember(tournamentScopedMatches) {
+                MatchTypeFilter.values().associateWith { mt ->
+                    tournamentScopedMatches.count { mt.matches(it) }
+                }
+            }
+
+            // 3. Match Type Filter Chips Row (All Types / ATP / WTA / Singles / Doubles)
+            MatchTypeChipsRow(
+                selectedMatchType = state.selectedMatchTypeFilter,
+                counts = matchTypeCounts,
+                onMatchTypeSelected = { viewModel.selectMatchTypeFilter(it) },
+                horizontalPadding = layoutConfig.horizontalScreenPadding
+            )
+
+            // Matches scoped by Stage 1 + Stage 2 + Stage 3 (Match Type) for status filter counts
+            val scopedMatches = remember(tournamentScopedMatches, state.selectedMatchTypeFilter) {
+                if (state.selectedMatchTypeFilter == MatchTypeFilter.ALL) {
+                    tournamentScopedMatches
+                } else {
+                    tournamentScopedMatches.filter { state.selectedMatchTypeFilter.matches(it) }
+                }
+            }
+
+            // 4. Filter Chips Row (Status: All / Live / Following / Upcoming / Results)
             FilterChipsRow(
                 selectedFilter = state.selectedFilter,
                 allCount = scopedMatches.size,
@@ -438,6 +462,15 @@ fun ScoreboardScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
+                            if (state.selectedMatchTypeFilter != MatchTypeFilter.ALL) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = { viewModel.selectMatchTypeFilter(MatchTypeFilter.ALL) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = UsOpenNavy)
+                                ) {
+                                    Text("Show All Match Types", color = Color.White)
+                                }
+                            }
                         }
                     }
                 }
@@ -802,7 +835,7 @@ private fun FilterChipsRow(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = horizontalPadding, vertical = 6.dp),
+            .padding(horizontal = horizontalPadding, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         for ((filter, count) in filters) {
@@ -813,12 +846,57 @@ private fun FilterChipsRow(
                 label = {
                     Text(
                         text = "${filter.label} ($count)",
+                        fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = selectedBg,
                     selectedLabelColor = selectedText
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun MatchTypeChipsRow(
+    selectedMatchType: MatchTypeFilter,
+    counts: Map<MatchTypeFilter, Int>,
+    onMatchTypeSelected: (MatchTypeFilter) -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
+    modifier: Modifier = Modifier
+) {
+    val isDark = isSystemInDarkTheme()
+    val activeBg = if (isDark) UsOpenGold else UsOpenNavy
+    val activeText = if (isDark) UsOpenNavyDark else Color.White
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPadding, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (matchType in MatchTypeFilter.values()) {
+            val isSelected = selectedMatchType == matchType
+            val count = counts[matchType] ?: 0
+            FilterChip(
+                selected = isSelected,
+                onClick = { onMatchTypeSelected(matchType) },
+                label = {
+                    Text(
+                        text = "${matchType.icon} ${matchType.displayName} ($count)",
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = activeBg,
+                    selectedLabelColor = activeText
                 )
             )
         }
@@ -840,7 +918,7 @@ fun TourTierChipsRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = horizontalPadding, vertical = 4.dp),
+            .padding(horizontal = horizontalPadding, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
