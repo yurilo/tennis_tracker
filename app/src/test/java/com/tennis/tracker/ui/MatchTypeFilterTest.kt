@@ -243,4 +243,66 @@ class MatchTypeFilterTest {
             viewModel.cleanup()
         }
     }
+
+    @Test
+    fun `Kinoshita Group Japan Open Women's matches resolve to WTA and never leak into ATP filters`() {
+        com.tennis.tracker.domain.model.TournamentResolver.clearCache()
+        val resolvedWomenSingles = com.tennis.tracker.domain.model.TournamentResolver.resolve(
+            rawName = "Kinoshita Group Japan Open",
+            groupingName = "Women's Singles"
+        )
+        assertEquals(TourType.WTA, resolvedWomenSingles.tour)
+        assertEquals(TournamentCategory.WTA_250, resolvedWomenSingles.category)
+
+        val japanWomenMatch = createMatch(
+            id = "jpo_w1",
+            player1Name = "Suzan Lamens",
+            player2Name = "Kimberly Birrell",
+            eventGrouping = "Women's Singles",
+            tournament = resolvedWomenSingles,
+            tour = resolvedWomenSingles.tour
+        )
+
+        assertFalse("WTA Japan Open match must NOT match MatchTypeFilter.ATP", MatchTypeFilter.ATP.matches(japanWomenMatch))
+        assertTrue("WTA Japan Open match MUST match MatchTypeFilter.WTA", MatchTypeFilter.WTA.matches(japanWomenMatch))
+        assertFalse("WTA Japan Open match must NOT match TourTierFilter.ATP_TOUR", TourTierFilter.ATP_TOUR.matches(japanWomenMatch))
+        assertTrue("WTA Japan Open match MUST match TourTierFilter.WTA_TOUR", TourTierFilter.WTA_TOUR.matches(japanWomenMatch))
+
+        val resolvedMenSingles = com.tennis.tracker.domain.model.TournamentResolver.resolve(
+            rawName = "Kinoshita Group Japan Open",
+            groupingName = "Men's Singles"
+        )
+        assertEquals(TourType.ATP, resolvedMenSingles.tour)
+        assertEquals(TournamentCategory.ATP_500, resolvedMenSingles.category)
+    }
+
+    @Test
+    fun `Defensive guardrail prevents Women's grouping with ATP tour tag from leaking into ATP filter and vice versa`() {
+        val mislabelledWomenMatch = createMatch(
+            id = "mislabeled_w",
+            player1Name = "Naomi Osaka",
+            player2Name = "Bianca Andreescu",
+            eventGrouping = "Women's Singles",
+            tournament = Tournaments.TOKYO_OPEN,
+            tour = TourType.ATP
+        )
+        assertFalse(MatchTypeFilter.ATP.matches(mislabelledWomenMatch))
+        assertTrue(MatchTypeFilter.WTA.matches(mislabelledWomenMatch))
+        assertFalse(TourTierFilter.ATP_TOUR.matches(mislabelledWomenMatch))
+        assertTrue(TourTierFilter.WTA_TOUR.matches(mislabelledWomenMatch))
+
+        val mislabelledMenMatch = createMatch(
+            id = "mislabeled_m",
+            player1Name = "Taylor Fritz",
+            player2Name = "Ben Shelton",
+            eventGrouping = "Men's Singles",
+            tournament = Tournaments.CHARLESTON_OPEN,
+            tour = TourType.WTA
+        )
+        assertTrue(MatchTypeFilter.ATP.matches(mislabelledMenMatch))
+        assertFalse(MatchTypeFilter.WTA.matches(mislabelledMenMatch))
+        assertTrue(TourTierFilter.ATP_TOUR.matches(mislabelledMenMatch))
+        assertFalse(TourTierFilter.WTA_TOUR.matches(mislabelledMenMatch))
+    }
 }
+

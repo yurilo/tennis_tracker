@@ -4,6 +4,7 @@ import com.tennis.tracker.domain.model.Competitor
 import com.tennis.tracker.domain.model.Match
 import com.tennis.tracker.domain.model.MatchState
 import com.tennis.tracker.domain.model.PlayerPhotoProvider
+import com.tennis.tracker.domain.model.TourType
 import com.tennis.tracker.domain.model.Tournament
 import com.tennis.tracker.domain.model.TournamentResolver
 import com.tennis.tracker.domain.model.Tournaments
@@ -179,6 +180,15 @@ open class EspnScoreboardApi(
                             else -> statusDesc
                         }
 
+                        val groupingLower = groupingName.lowercase()
+                        val isWomenGrouping = groupingLower.contains("women") || groupingLower.contains("wta") || groupingLower.contains("ladies")
+                        val isMenGrouping = (!isWomenGrouping && groupingLower.contains("men")) || groupingLower.contains("atp") || groupingLower.contains("gentlemen")
+                        val matchTour = when {
+                            isWomenGrouping && resolvedTournament.tour == TourType.ATP -> TourType.WTA
+                            isMenGrouping && resolvedTournament.tour == TourType.WTA -> TourType.ATP
+                            else -> resolvedTournament.tour
+                        }
+
                         val match = Match(
                             id = compId,
                             tournamentName = tournamentName,
@@ -195,7 +205,7 @@ open class EspnScoreboardApi(
                             durationMinutes = durationMinutes,
                             espnEventId = compId,
                             tournament = resolvedTournament,
-                            tour = resolvedTournament.tour,
+                            tour = matchTour,
                             category = resolvedTournament.category,
                             surface = resolvedTournament.surface
                         )

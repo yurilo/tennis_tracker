@@ -29,16 +29,22 @@ enum class TourTierFilter(val displayName: String, val icon: String) {
         val tour = match?.effectiveTour ?: tournament?.tour ?: TourType.COMBINED
         val isGs = tournament?.isGrandSlam == true || match?.tournament?.isGrandSlam == true || cat.isGrandSlam
 
-        val isMenGrouping = match?.eventGrouping?.let {
-            it.contains("men", ignoreCase = true) && !it.contains("women", ignoreCase = true)
+        val isWomenGrouping = match?.eventGrouping?.let {
+            it.contains("women", ignoreCase = true) ||
+                it.contains("wta", ignoreCase = true) ||
+                it.contains("ladies", ignoreCase = true)
         } ?: false
-        val isWomenGrouping = match?.eventGrouping?.contains("women", ignoreCase = true) == true
+        val isMenGrouping = match?.eventGrouping?.let {
+            (!isWomenGrouping && it.contains("men", ignoreCase = true)) ||
+                it.contains("atp", ignoreCase = true) ||
+                it.contains("gentlemen", ignoreCase = true)
+        } ?: false
 
         return when (this) {
             ALL -> true
             GRAND_SLAMS -> isGs
-            ATP_TOUR -> if (match != null) (match.effectiveTour == TourType.ATP || (match.effectiveTour == TourType.COMBINED && !isWomenGrouping) || isMenGrouping) else tour.isAtp
-            WTA_TOUR -> if (match != null) (match.effectiveTour == TourType.WTA || (match.effectiveTour == TourType.COMBINED && !isMenGrouping) || isWomenGrouping) else tour.isWta
+            ATP_TOUR -> if (match != null) (!isWomenGrouping && (match.effectiveTour == TourType.ATP || match.effectiveTour == TourType.COMBINED || isMenGrouping)) else tour.isAtp
+            WTA_TOUR -> if (match != null) (!isMenGrouping && (match.effectiveTour == TourType.WTA || match.effectiveTour == TourType.COMBINED || isWomenGrouping)) else tour.isWta
             MASTERS_1000 -> cat.is1000
             TIER_500_250 -> cat.is500Or250
         }

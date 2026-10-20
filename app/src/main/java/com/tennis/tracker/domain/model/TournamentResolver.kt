@@ -79,8 +79,8 @@ object TournamentResolver {
      */
     private fun refineForGrouping(canonical: Tournament, groupingName: String): Tournament {
         val groupingLower = groupingName.lowercase()
-        val isWomen = groupingLower.contains("women") || groupingLower.contains("ladies")
-        val isMen = !isWomen && groupingLower.contains("men")
+        val isWomen = groupingLower.contains("women") || groupingLower.contains("ladies") || groupingLower.contains("wta")
+        val isMen = (!isWomen && groupingLower.contains("men")) || groupingLower.contains("gentlemen") || groupingLower.contains("atp")
 
         if (canonical.id == "china_open") {
             return if (isMen) {
@@ -104,6 +104,32 @@ object TournamentResolver {
             } else if (isWomen) {
                 canonical.copy(tour = TourType.WTA, category = TournamentCategory.WTA_500)
             } else canonical
+        }
+
+        if (canonical.id == "tokyo_open") {
+            return if (isWomen) {
+                canonical.copy(tour = TourType.WTA, category = TournamentCategory.WTA_250)
+            } else canonical
+        }
+
+        if (isWomen && canonical.tour == TourType.ATP) {
+            val wtaCat = when (canonical.category) {
+                TournamentCategory.MASTERS_1000 -> TournamentCategory.WTA_1000
+                TournamentCategory.ATP_500 -> TournamentCategory.WTA_500
+                TournamentCategory.ATP_250 -> TournamentCategory.WTA_250
+                else -> canonical.category
+            }
+            return canonical.copy(tour = TourType.WTA, category = wtaCat)
+        }
+
+        if (isMen && canonical.tour == TourType.WTA) {
+            val atpCat = when (canonical.category) {
+                TournamentCategory.WTA_1000 -> TournamentCategory.MASTERS_1000
+                TournamentCategory.WTA_500 -> TournamentCategory.ATP_500
+                TournamentCategory.WTA_250 -> TournamentCategory.ATP_250
+                else -> canonical.category
+            }
+            return canonical.copy(tour = TourType.ATP, category = atpCat)
         }
 
         return canonical

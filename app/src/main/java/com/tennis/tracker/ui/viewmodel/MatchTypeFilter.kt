@@ -24,14 +24,14 @@ enum class MatchTypeFilter(
             match.player2.isDoubles ||
             grouping.contains("doubles") ||
             grouping.contains("mixed")
-        val isWomen = grouping.contains("women") || grouping.contains("wta")
-        val isMen = (grouping.contains("men") && !isWomen) || grouping.contains("atp")
+        val isWomen = grouping.contains("women") || grouping.contains("wta") || grouping.contains("ladies")
+        val isMen = (grouping.contains("men") && !isWomen) || grouping.contains("atp") || grouping.contains("gentlemen")
         val isMixed = grouping.contains("mixed")
 
         return when (this) {
             ALL -> true
-            ATP -> !isMixed && (isMen || match.effectiveTour == TourType.ATP || (match.effectiveTour == TourType.COMBINED && !isWomen))
-            WTA -> !isMixed && (isWomen || match.effectiveTour == TourType.WTA)
+            ATP -> !isMixed && !isWomen && (isMen || match.effectiveTour == TourType.ATP || match.effectiveTour == TourType.COMBINED)
+            WTA -> !isMixed && !isMen && (isWomen || match.effectiveTour == TourType.WTA)
             SINGLES -> !isDoublesMatch
             DOUBLES -> isDoublesMatch
         }
