@@ -249,6 +249,18 @@ class ScoreboardViewModel(
             com.tennis.tracker.data.local.MatchCacheManager.loadMatches(appCtx)
         }
         if (current.isNotEmpty()) {
+            if (_uiState.value.allMatches.isEmpty()) {
+                _uiState.update { state ->
+                    val contextual = computeContextualTournaments(current, state.selectedTierFilter, state.currentTournament)
+                    state.copy(
+                        isLoading = false,
+                        allMatches = current,
+                        contextualTournaments = contextual,
+                        availableTournaments = contextual,
+                        liveCount = current.count { it.state == MatchState.LIVE }
+                    )
+                }
+            }
             com.tennis.tracker.data.local.MatchCacheManager.saveMatches(appCtx, current)
             fm.cleanupExpiredFollowedMatches(appCtx, current)
         }
@@ -561,6 +573,51 @@ class ScoreboardViewModel(
                     followedIds = state.followedMatchIds
                 )
             )
+        }
+    }
+
+    /**
+     * Handles opening the app from the home screen widget.
+     * When the user has followed matches (or tapped a specific followed match in the widget),
+     * automatically applies [MatchFilter.FOLLOWED] across all tournaments and match types
+     * so all followed matches are immediately visible.
+     */
+    fun handleWidgetLaunch(matchId: String? = null, isWidgetEmpty: Boolean = false) {
+        closeMatchStats()
+        closeH2H()
+        val hasFollowedMatches = !isWidgetEmpty && (_uiState.value.followedMatchIds.isNotEmpty() || !matchId.isNullOrEmpty())
+        if (hasFollowedMatches) {
+            repository.setActiveTournament(Tournaments.ALL)
+            _uiState.update { state ->
+                val updatedFollowedIds = if (!matchId.isNullOrEmpty()) {
+                    state.followedMatchIds + matchId
+                } else {
+                    state.followedMatchIds
+                }
+                val contextual = computeContextualTournaments(state.allMatches, TourTierFilter.ALL, Tournaments.ALL)
+                state.copy(
+                    selectedTierFilter = TourTierFilter.ALL,
+                    currentTournament = Tournaments.ALL,
+                    selectedMatchTypeFilter = MatchTypeFilter.ALL,
+                    selectedFilter = MatchFilter.FOLLOWED,
+                    searchQuery = "",
+                    followedMatchIds = updatedFollowedIds,
+                    followedCount = state.allMatches.count { it.id in updatedFollowedIds },
+                    contextualTournaments = contextual,
+                    availableTournaments = contextual,
+                    filteredMatches = applyFilterAndSearch(
+                        matches = state.allMatches,
+                        tier = TourTierFilter.ALL,
+                        tournament = Tournaments.ALL,
+                        matchType = MatchTypeFilter.ALL,
+                        filter = MatchFilter.FOLLOWED,
+                        query = "",
+                        followedIds = updatedFollowedIds
+                    )
+                )
+            }
+        } else {
+            setFilter(MatchFilter.ALL)
         }
     }
 

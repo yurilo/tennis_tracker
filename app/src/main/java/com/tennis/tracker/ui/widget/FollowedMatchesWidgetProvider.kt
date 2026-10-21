@@ -136,6 +136,8 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
         const val ACTION_TOGGLE_AUTO_SYNC = "com.tennis.tracker.ACTION_TOGGLE_AUTO_SYNC"
         const val ACTION_PINNED_SUCCESS = "com.tennis.tracker.ACTION_PINNED_SUCCESS"
         const val EXTRA_MATCH_ID = "extra_match_id"
+        const val EXTRA_FROM_WIDGET = "extra_from_widget"
+        const val EXTRA_WIDGET_EMPTY = "extra_widget_empty"
 
         fun triggerBackgroundSync(
             context: Context,
@@ -184,9 +186,10 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
 
-                // PendingIntent to launch MainActivity from header or empty state
+                // PendingIntent to launch MainActivity from widget header (opens Following filter when matches are followed)
                 val openAppIntent = Intent(context, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(EXTRA_FROM_WIDGET, true)
                 }
                 val openAppPendingIntent = PendingIntent.getActivity(
                     context,
@@ -195,8 +198,22 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                     immutableFlags
                 )
                 views.setOnClickPendingIntent(R.id.btn_widget_open_app, openAppPendingIntent)
-                views.setOnClickPendingIntent(R.id.btn_empty_open_app, openAppPendingIntent)
-                views.setOnClickPendingIntent(R.id.widget_empty_view, openAppPendingIntent)
+                views.setOnClickPendingIntent(R.id.txt_widget_title, openAppPendingIntent)
+
+                // PendingIntent to launch MainActivity from empty state ("Pick Matches to Follow")
+                val openEmptyIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(EXTRA_FROM_WIDGET, true)
+                    putExtra(EXTRA_WIDGET_EMPTY, true)
+                }
+                val openEmptyPendingIntent = PendingIntent.getActivity(
+                    context,
+                    4,
+                    openEmptyIntent,
+                    immutableFlags
+                )
+                views.setOnClickPendingIntent(R.id.btn_empty_open_app, openEmptyPendingIntent)
+                views.setOnClickPendingIntent(R.id.widget_empty_view, openEmptyPendingIntent)
 
                 // PendingIntent to manually refresh widget
                 val refreshIntent = Intent(context, FollowedMatchesWidgetProvider::class.java).apply {
@@ -235,7 +252,8 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
 
                 // PendingIntent template for clicking on match items
                 val itemClickIntent = Intent(context, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(EXTRA_FROM_WIDGET, true)
                 }
                 val itemClickFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE

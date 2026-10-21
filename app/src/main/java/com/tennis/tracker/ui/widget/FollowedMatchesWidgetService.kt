@@ -191,6 +191,7 @@ class FollowedMatchesRemoteViewsFactory(
             // 5. FillInIntent for item click
             val fillInIntent = Intent().apply {
                 putExtra(FollowedMatchesWidgetProvider.EXTRA_MATCH_ID, match.id)
+                putExtra(FollowedMatchesWidgetProvider.EXTRA_FROM_WIDGET, true)
             }
             views.setOnClickFillInIntent(R.id.widget_match_item_root, fillInIntent)
 

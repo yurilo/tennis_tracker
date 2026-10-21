@@ -66,19 +66,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleWidgetIntent(intent)
     }
 
     private fun handleWidgetIntent(intent: Intent?) {
         if (intent == null) return
         val matchId = intent.getStringExtra(FollowedMatchesWidgetProvider.EXTRA_MATCH_ID)
-        if (!matchId.isNullOrEmpty()) {
-            val match = viewModel.uiState.value.allMatches.find { it.id == matchId }
-            if (match != null) {
-                viewModel.openMatchStats(match)
-            } else {
-                viewModel.setFilter(MatchFilter.FOLLOWED)
-            }
+        val fromWidget = intent.getBooleanExtra(FollowedMatchesWidgetProvider.EXTRA_FROM_WIDGET, false) ||
+            !matchId.isNullOrEmpty()
+        val isWidgetEmpty = intent.getBooleanExtra(FollowedMatchesWidgetProvider.EXTRA_WIDGET_EMPTY, false)
+
+        if (fromWidget) {
+            viewModel.handleWidgetLaunch(matchId = matchId, isWidgetEmpty = isWidgetEmpty)
+            intent.removeExtra(FollowedMatchesWidgetProvider.EXTRA_MATCH_ID)
+            intent.removeExtra(FollowedMatchesWidgetProvider.EXTRA_FROM_WIDGET)
+            intent.removeExtra(FollowedMatchesWidgetProvider.EXTRA_WIDGET_EMPTY)
         }
     }
 }
