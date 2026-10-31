@@ -88,6 +88,39 @@ class SettingsRepositoryImpl(
         }
     }
 
+    override suspend fun updateBugReportEndpoint(endpoint: String) {
+        val cleanUrl = endpoint.trim()
+        val finalUrl = if (cleanUrl.isNotEmpty()) {
+            require(cleanUrl.startsWith("https://", ignoreCase = true)) {
+                "Only secure HTTPS endpoints are permitted"
+            }
+            cleanUrl
+        } else {
+            AppSettings.DEFAULT_BUG_REPORT_ENDPOINT
+        }
+
+        synchronized(lock) {
+            if (finalUrl == AppSettings.DEFAULT_BUG_REPORT_ENDPOINT) {
+                prefs.edit().remove(KEY_BUG_REPORT_ENDPOINT).apply()
+            } else {
+                prefs.edit().putString(KEY_BUG_REPORT_ENDPOINT, finalUrl).apply()
+            }
+            _settings.value = _settings.value.copy(bugReportEndpoint = finalUrl)
+        }
+    }
+
+    override suspend fun updateGithubToken(token: String?) {
+        val cleanToken = token?.trim()?.takeIf { it.isNotEmpty() }
+        synchronized(lock) {
+            if (cleanToken == null) {
+                prefs.edit().remove(KEY_GITHUB_TOKEN).apply()
+            } else {
+                prefs.edit().putString(KEY_GITHUB_TOKEN, cleanToken).apply()
+            }
+            _settings.value = _settings.value.copy(githubToken = cleanToken)
+        }
+    }
+
     override suspend fun resetToDefaults() {
         synchronized(lock) {
             prefs.edit().clear().apply()
@@ -117,13 +150,24 @@ class SettingsRepositoryImpl(
             AppSettings.DEFAULT_TELEMETRY_ENDPOINT
         }
 
+        val rawBugEndpoint = prefs.getString(KEY_BUG_REPORT_ENDPOINT, null)?.trim()
+        val bugEndpoint = if (!rawBugEndpoint.isNullOrEmpty() && rawBugEndpoint.startsWith("https://", ignoreCase = true)) {
+            rawBugEndpoint
+        } else {
+            AppSettings.DEFAULT_BUG_REPORT_ENDPOINT
+        }
+
+        val rawGithubToken = prefs.getString(KEY_GITHUB_TOKEN, null)?.trim()?.takeIf { it.isNotEmpty() }
+
         return AppSettings(
             autoRefreshInterval = autoRefresh,
             matchRetention = retention,
             widgetSyncMode = widgetSync,
             defaultTournament = defaultTour,
             telemetryEnabled = telemetryEnabled,
-            telemetryEndpoint = endpoint
+            telemetryEndpoint = endpoint,
+            bugReportEndpoint = bugEndpoint,
+            githubToken = rawGithubToken
         )
     }
 
@@ -136,6 +180,8 @@ class SettingsRepositoryImpl(
         const val KEY_DEFAULT_TOURNAMENT = "key_default_tournament"
         const val KEY_TELEMETRY_ENABLED = "key_telemetry_enabled"
         const val KEY_TELEMETRY_ENDPOINT = "key_telemetry_endpoint"
+        const val KEY_BUG_REPORT_ENDPOINT = "key_bug_report_endpoint"
+        const val KEY_GITHUB_TOKEN = "key_github_token"
 
         @Volatile
         private var instance: SettingsRepositoryImpl? = null

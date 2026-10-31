@@ -1,131 +1,119 @@
-# Project: Tennis Tracker Multi-Tournament Support
+# Project: Tennis Tracker In-App Bug Reporting & Automated Triage System
 
 ## Architecture
-- **Layer 1: Domain Models (`com.tennis.tracker.domain.model`)**:
-  - Core abstractions: `Tournament`, `TourType` (ATP, WTA, COMBINED), `TournamentCategory` (GRAND_SLAM, MASTERS_1000/WTA_1000, ATP_500/WTA_500, ATP_250/WTA_250, FINALS), `CourtSurface` (HARD, CLAY, GRASS, CARPET), `Match`, `H2H`.
-  - Dynamic discovery & resolution: `TournamentResolver`.
-- **Layer 2: Remote & Local Data (`com.tennis.tracker.data`)**:
-  - `EspnScoreboardApi`: Live ESPN feed parsing, metadata assignment via `TournamentResolver`.
-  - `EspnWatchMatcher`: Video stream matching with pre-indexed streams and compiled regex patterns.
-  - `YouTubeHighlightResolver`: Video highlight matching with pre-lowercased official channel set.
-  - `TennisStatsApi`: Live stats parsing with indexed player token lookup.
-  - `ScoreboardRepositoryImpl`: Match fetching, caching, deduplication with `distinctBy`, thread-safe state.
-  - `H2HDataProvider`, `MockH2HData`, `MockTournamentData`: Dynamic year/date resolution via `Year.now()`, `LocalDate.now()`, `Instant.now()`.
-- **Layer 3: UI & ViewModel (`com.tennis.tracker.ui`)**:
-  - `TourTierFilter`: Enum for tour tier chips (`All`, `Grand Slams`, `ATP Tour`, `WTA Tour`, `1000s`, `500s/250s`).
-  - `ScoreboardUiState`: Holds `selectedTierFilter`, `currentTournament`, `contextualTournaments`, and matches.
-  - `ScoreboardViewModel`: Handles tier filter selection, contextual tournament generation, and multi-stage match filtering.
-  - `ScoreboardScreen`: Tiered chip rows (`TourTierChipsRow`, `ContextualTournamentChipsRow`, `FilterChipsRow`).
-- **Layer 4: Automated Testing (`com.tennis.tracker.test`)**:
-  - Comprehensive unit tests covering dynamic dates, tournament classification, collection pipelines, and regression suite.
-  - Opaque-box E2E test suite (Tiers 1-4) and adversarial hardening (Tier 5).
+- **Layer 1: Diagnostics & Telemetry Models (`com.tennis.tracker.domain.model.bugreport`)**:
+  - `BugReportCategory`: Enum for issue categories (`FILTER_TOUR_MISMATCH`, `SCORE_LIVE_DATA`, `WATCH_HIGHLIGHTS`, `HOME_WIDGET`, `UI_LAYOUT`, `OTHER`) with display labels and GitHub label slugs.
+  - `BugReport`: User-entered information (category, summary, description, reproduction steps, timestamp).
+  - `DiagnosticSnapshot`: Device info (app version, versionCode, form factor `PHONE`/`LAPTOP`, window width bucket), scoreboard state (`TourTierFilter`, `currentTournament`, `MatchTypeFilter`, `MatchFilter`, search query, offline flag, match counts), `AppSettings` snapshot, optional `MatchContextSnapshot`, and recent `DiagnosticBreadcrumb` list.
+  - `PiiScrubber`: Zero-PII sanitization engine redacting GitHub tokens, API keys, passwords, bearer tokens, IP addresses, emails, and filesystem paths.
+  - `DiagnosticPayloadFormatter`: Markdown summary builder + embedded `<details>` JSON block (`<!-- BUGREPORT_JSON_START -->...<!-- BUGREPORT_JSON_END -->`).
+- **Layer 2: Diagnostic Collection & Ring Buffer (`com.tennis.tracker.data.diagnostic`)**:
+  - `DiagnosticBreadcrumbBuffer`: Thread-safe, memory-bounded 25-event circular buffer for repository and network events.
+  - `DiagnosticCollector`: Gathers environment, scoreboard state, settings, and match metadata.
+- **Layer 3: Network Submission & Web Fallback (`com.tennis.tracker.data.bugreport`)**:
+  - `BugReportSubmissionService`: Submits bug reports via Cloudflare Worker relay `POST /bug-report` or direct GitHub REST API if custom token provided.
+  - `GitHubIssueUrlBuilder`: Generates pre-filled GitHub new issue URLs (`https://github.com/yurilo/tennis_tracker/issues/new?...`) with title, labels, and clipboard copy guidance.
+  - `telemetry_dashboard/worker.js`: Cloudflare Worker handling `POST /bug-report` with KV rate limiting, payload validation, and GitHub Issues API forwarding via `env.GITHUB_TOKEN`.
+- **Layer 4: In-App UI & Contextual Touchpoints (`com.tennis.tracker.ui.bugreport`)**:
+  - Global entry point: `IconButton(Icons.Default.BugReport)` in `ScoreboardScreen` TopAppBar + About dialog link.
+  - Contextual entry point: "Report Issue for this Match" button in `MatchCopyBottomSheet`.
+  - `BugReportBottomSheet`: Responsive Material 3 bottom sheet (`widthIn(max = 640.dp)`) for Phone and Laptop with category chips, description fields, diagnostic bundle preview toggle, submit action, and submission result feedback (issue number + URL).
+- **Layer 5: GitHub Actions Automated Triage Engine (`.github/workflows` & `scripts`)**:
+  - `.github/workflows/bug-triage.yml`: GitHub Actions workflow triggered on issues `opened` or `labeled` with `in-app-report` / `bug`.
+  - `scripts/triage_bug_report.py`: Standalone Python 3 correlation script parsing embedded JSON, mapping categories and state to Kotlin source files, correlating git commits/issues, and posting 5-section triage comment with candidate patch suggestions.
+  - `scripts/test_triage_bug_report.py`: Python unit test suite for triage engine.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
-|---|---|---|---|---|
-| 1 | Dynamic Year/Date Resolution | Eliminate hardcoded years ("2026", "Tennis Tournament 2026") using `Year.now()`, `LocalDate.now()`. | M1 | R1, Survey 1 |
-| 2 | Dynamic Mock Relative Timestamps | Generate relative timestamps (`Instant.now()`, `Duration`) in mock datasets. | M1 | R1, Survey 1 |
-| 3 | Date Parser Harmonization | Migrate fragile `Instant.parse` in `EspnWatchApi` to `TimezoneFormatter.parseToInstant`. | M1 | R1, Survey 1 |
-| 4 | Tour Types Domain Abstraction | Enum `TourType` (`ATP`, `WTA`, `COMBINED`) with helper properties. | M2 | R2, Survey 2 |
-| 5 | Tournament Categories Domain Abstraction | Enum `TournamentCategory` (`GRAND_SLAM`, `MASTERS_1000`/`WTA_1000`, `ATP_500`/`WTA_500`, `ATP_250`/`WTA_250`, `FINALS`). | M2 | R2, Survey 2 |
-| 6 | Court Surface Domain Model | Promote `CourtSurface` (`HARD`, `CLAY`, `GRASS`, `CARPET`) to primary domain model. | M2 | R2, Survey 2 |
-| 7 | Expanded `Tournament` Model & Registry | Add tour, category, surface, city, country, and official ATP/WTA registry. | M2 | R2, Survey 2 |
-| 8 | Enriched `Match` Domain Model | Add tournament, tour, category, surface references and effective getters. | M2 | R2, Survey 2 |
-| 9 | Dynamic Tournament Resolver & Discovery | `TournamentResolver` for canonical match + discovery from live ESPN feeds. | M2 | R2, Survey 2 |
-| 10 | Live ESPN Feed Metadata Assignment | Update `EspnScoreboardApi` to classify and assign tournament metadata to matches. | M2 | R2, Survey 2 |
-| 11 | Tour Tier Filter Chips | UI chips for `All`, `Grand Slams`, `ATP Tour`, `WTA Tour`, `1000s`, `500s/250s`. | M3 | R2, Survey 2 |
-| 12 | Contextual Tournament Chips | Contextual chips showing active tournaments matching selected tier. | M3 | R2, Survey 2 |
-| 13 | ViewModel Multi-Stage Filtering | Update `ScoreboardViewModel` with tier selection and contextual tournament computation. | M3 | R2, Survey 2 |
-| 14 | Scoreboard Screen Compose UI | Restructure `ScoreboardScreen` to render tiered chips and contextual chips rows. | M3 | R2, Survey 2 |
-| 15 | Repository Loop & Deduplication Optimization | Replace $O(N \times M)$ deduplication with `distinctBy`, ensure thread safety. | M4 | R3, Survey 3 |
-| 16 | Stream Matcher Pre-Indexing & Regex Optimization | Extract top-level regex constants and pre-normalize stream titles in `EspnWatchMatcher`. | M4 | R3, Survey 3 |
-| 17 | Video Highlight Resolver Single-Pass Optimization | Convert `OFFICIAL_CHANNELS` to `Set` and single-pass matching in `YouTubeHighlightResolver`. | M4 | R3, Survey 3 |
-| 18 | API Parser Loop Refactoring & Null Safety | Refactor `EspnScoreboardApi` loops with Kotlin collection helpers, remove unsafe assertions. | M4 | R3, Survey 3 |
-| 19 | Live Stats Search Indexing | Replace $O(N \times M)$ search loop in `TennisStatsApi` with indexed map lookup. | M4 | R3, Survey 3 |
-| 20 | Dynamic Year Boundary Unit Tests | Verify dynamic year resolution and rollover without hardcoded years. | M5 | R4, Survey 3 |
-| 21 | Tournament Classification Unit Tests | Verify matching and category assignment for ATP, WTA, 1000s, 500s, 250s. | M5 | R4, Survey 3 |
-| 22 | Collection Pipeline Efficiency Tests | Verify $O(N+M)$ deduplication and pre-indexing correctness/performance. | M5 | R4, Survey 3 |
-| 23 | Regression Verification | Verify all 152 baseline unit tests pass with zero regressions. | M5 | R4, Survey 3 |
-| 24 | E2E Test Suite (Tiers 1-4) & Adversarial Hardening (Tier 5) | Pass 100% of E2E test suite and adversarial test coverage verification. | M5 | R4, Dual Track |
+|---|---------|-------------|-----------|--------|
+| 1 | Bug Report Domain Models | Define `BugReportCategory`, `BugReport`, `DiagnosticSnapshot`, `Breadcrumb`. | M1 | R1, R2, Survey 2 |
+| 2 | PII Redaction Engine (`PiiScrubber`) | Regex-based zero-PII scrubbing for tokens, URLs, emails, IPs, paths. | M1 | R2, Survey 2 |
+| 3 | Diagnostic Breadcrumb Buffer | 25-event thread-safe FIFO ring buffer for network & repository events. | M1 | R2, Survey 2 |
+| 4 | Diagnostic Snapshot Collector | Collects app version, form factor, scoreboard state, settings, match data. | M1 | R2, Survey 1, Survey 2 |
+| 5 | Payload Formatter (Markdown + JSON) | Generates Markdown summary and `<!-- BUGREPORT_JSON_START -->` block. | M1 | R2, Survey 2 |
+| 6 | Cloudflare Worker `/bug-report` Route | Endpoint in `worker.js` with CORS, rate-limiting, and GitHub API forwarding. | M2 | R3, Survey 2 |
+| 7 | Android Bug Report Submission Client | `BugReportSubmissionService` with OkHttpClient posting to Worker relay. | M2 | R3, Survey 2 |
+| 8 | GitHub Issue URL & Web Fallback Builder | `GitHubIssueUrlBuilder` + clipboard copy fallback for offline/unconfigured states. | M2 | R3, Survey 2 |
+| 9 | AppSettings Bug Report Configuration | Add optional bug report endpoint & GitHub token overrides to Settings. | M2 | R3, Survey 1, Survey 2 |
+| 10 | Scoreboard TopAppBar Bug Report Button | Global entry point icon in `ScoreboardScreen.kt` TopAppBar actions. | M3 | R1, Survey 1 |
+| 11 | Contextual Match Action Sheet Entry | "Report Issue for this Match" button in `MatchCopyBottomSheet.kt`. | M3 | R1, Survey 1 |
+| 12 | Bug Report Modal Sheet (Compose UI) | `BugReportBottomSheet` with category chips, text fields, and preview toggle. | M3 | R1, Survey 1 |
+| 13 | Submission Feedback & Issue Link UI | Displays created issue number, clickable URL, or fallback instructions. | M3 | R1, Survey 1 |
+| 14 | GitHub Actions Workflow (`bug-triage.yml`)| Action triggered on `issues: [opened, labeled]` executing triage script. | M4 | R4, Survey 3 |
+| 15 | Python Triage & Correlation Script | `triage_bug_report.py` mapping diagnostics to code, commits, and patches. | M4 | R4, Survey 3 |
+| 16 | Heuristic Localization & LLM Dual-Mode | Deterministic static analysis + optional LLM patch generation. | M4 | R4, Survey 3 |
+| 17 | Triage Script Python Unit Tests | `scripts/test_triage_bug_report.py` verifying parsing, mapping, formatting. | M4 | R4, Survey 3 |
+| 18 | Diagnostic & Submission Unit Tests | JUnit tests for collector, scrubbing, URL builder, repository, ViewModel. | M5 | R5, Dual Track |
+| 19 | Opaque-Box E2E Test Suite (Tiers 1-4) | Comprehensive test suite verifying all bug report features opaque-box. | M5 | R5, Dual Track |
+| 20 | Adversarial Coverage Hardening (Tier 5) | White-box adversarial testing and forensic audit clean verification. | M5 | R5, Dual Track |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
-|---|---|---|---|---|
-| M1 | Dynamic Dates & Year Resolution | Features 1–3: `H2HDataProvider.kt`, `MockH2HData.kt`, `MockTournamentData.kt`, `TimezoneFormatter.kt`, `EspnWatchApi.kt`, `H2HTest.kt` | none | DONE |
-| M2 | ATP & WTA Tournament Abstractions & Live Classification | Features 4–10: `TourType.kt`, `TournamentCategory.kt`, `CourtSurface.kt`, `Tournament.kt`, `Match.kt`, `TournamentResolver.kt`, `EspnScoreboardApi.kt` | none | DONE |
-| M3 | Tiered UI Chips & Filtering | Features 11–14: `TourTierFilter.kt`, `ScoreboardUiState.kt`, `ScoreboardViewModel.kt`, `ScoreboardScreen.kt` | M2 | DONE |
-| M4 | Loop Refactoring & Performance Optimization | Features 15–19: `ScoreboardRepositoryImpl.kt`, `EspnWatchMatcher.kt`, `YouTubeHighlightResolver.kt`, `EspnScoreboardApi.kt`, `TennisStatsApi.kt` | M1, M2 | DONE |
-| M5 | Automated Testing & Verification | Features 20–24: New unit tests, regression verification (152 tests), E2E test suite pass (Tiers 1-4), Tier 5 adversarial hardening | M1, M2, M3, M4 | DONE |
+|---|------|-------|-------------|--------|
+| M1 | Diagnostic Collector, PII Scrubber & Breadcrumb Buffer | Features 1–5: `com.tennis.tracker.domain.model.bugreport.*`, `DiagnosticBreadcrumbBuffer.kt`, `PiiScrubber.kt`, `DiagnosticCollector.kt`, `BugReportPayloadFormatter.kt` | none | DONE |
+| M2 | Cloudflare Worker Bug-Report Relay & Submission Client | Features 6–9: `telemetry_dashboard/worker.js`, `BugReportSubmissionService.kt`, `GitHubIssueUrlBuilder.kt`, `AppSettings.kt` | M1 | DONE |
+| M3 | Bug Reporting UI & Contextual Touchpoints | Features 10–13: `ScoreboardScreen.kt`, `MatchCopyBottomSheet.kt`, `BugReportBottomSheet.kt`, `BugReportViewModel.kt` | M1, M2 | DONE |
+| M4 | GitHub Actions Bug Triage Workflow & Correlation Script | Features 14–17: `.github/workflows/bug-triage.yml`, `scripts/triage_bug_report.py`, `scripts/test_triage_bug_report.py` | M1 | DONE |
+| M5 | Automated Testing, E2E Suite & Adversarial Hardening | Features 18–20: Full JUnit tests, Python tests, E2E Test Suite (Tiers 1-4), Tier 5 adversarial tests, clean build | M1, M2, M3, M4 | DONE |
 
 ## Interface Contracts
 
-### M1 ↔ Codebase
-- `Year.now().value`: Primary integer year provider.
-- `LocalDate.now()`: Primary date provider.
-- `TimezoneFormatter.parseToInstant(rawTime: String?): Instant?`: Universal date-time parser.
+### M1 ↔ M2, M3
+- `BugReportCategory`:
+  - `FILTER_TOUR_MISMATCH("Filter / Tour Mismatch", "filter-tour")`
+  - `SCORE_LIVE_DATA("Score / Live Data", "score-live-data")`
+  - `WATCH_HIGHLIGHTS("Watch / Highlights", "watch-highlights")`
+  - `HOME_WIDGET("Home Widget", "home-widget")`
+  - `UI_LAYOUT("UI / Layout", "ui-layout")`
+  - `OTHER("Other", "other")`
+- `DiagnosticSnapshot`:
+  - `fun toJson(): JSONObject`
+  - `fun toFormattedMarkdown(): String`
+  - `fun toFullIssueBody(userReport: BugReport): String` (contains `<!-- BUGREPORT_JSON_START -->...<!-- BUGREPORT_JSON_END -->`)
+- `PiiScrubber`:
+  - `fun scrub(input: String): String`
+- `DiagnosticBreadcrumbBuffer`:
+  - `fun log(tag: String, message: String, metadata: Map<String, String> = emptyMap())`
+  - `fun getRecentBreadcrumbs(): List<DiagnosticBreadcrumb>`
 
-### M2 ↔ M3, M4, M5
-- `TourType`: Enum { ATP, WTA, COMBINED } with `isAtp`, `isWta`.
-- `TournamentCategory`: Enum { GRAND_SLAM, MASTERS_1000, WTA_1000, ATP_500, WTA_500, ATP_250, WTA_250, FINALS } with `isGrandSlam`, `is1000`, `is500`, `is250`, `is500Or250`, `isFinals`.
-- `CourtSurface`: Enum { HARD, CLAY, GRASS, CARPET } with `displayName`, `icon`, `colorHex`.
-- `Tournament`:
-  - `val tour: TourType = TourType.COMBINED`
-  - `val category: TournamentCategory = ...`
-  - `val surface: CourtSurface = CourtSurface.HARD`
-  - `val city: String? = null`
-  - `val country: String? = null`
-  - `fun matches(rawTournamentName: String?): Boolean`
-- `Match`:
-  - `val tournament: Tournament? = null`
-  - `val tour: TourType? = null`
-  - `val category: TournamentCategory? = null`
-  - `val surface: CourtSurface? = null`
-  - `val effectiveTour: TourType`
-  - `val effectiveCategory: TournamentCategory`
-  - `val effectiveSurface: CourtSurface`
-- `TournamentResolver`:
-  - `fun resolve(rawName: String, groupingName: String = "", eventJson: JSONObject? = null): Tournament`
+### M2 ↔ M3
+- `BugReportSubmissionService`:
+  - `suspend fun submitReport(report: BugReport, snapshot: DiagnosticSnapshot, endpoint: String?, customToken: String?): SubmissionResult`
+  - `sealed class SubmissionResult { data class Success(val issueNumber: Int, val issueUrl: String) : SubmissionResult(); data class FallbackRequired(val fallbackUrl: String, val fullMarkdownBody: String, val reason: String) : SubmissionResult() }`
+- `GitHubIssueUrlBuilder`:
+  - `fun buildNewIssueUrl(title: String, body: String, labels: List<String>): String`
 
-### M3 ↔ M2 & UI
-- `TourTierFilter`: Enum { ALL, GRAND_SLAMS, ATP_TOUR, WTA_TOUR, MASTERS_1000, TIER_500_250 }
-  - `fun matches(tournament: Tournament?, match: Match? = null): Boolean`
-- `ScoreboardUiState`:
-  - `val selectedTierFilter: TourTierFilter`
-  - `val contextualTournaments: List<Tournament>`
-- `ScoreboardViewModel`:
-  - `fun selectTierFilter(tier: TourTierFilter)`
-  - `fun selectTournament(tournament: Tournament)`
+### M1, M2 ↔ M4
+- JSON Block Markers:
+  - Start: `<!-- BUGREPORT_JSON_START -->`
+  - End: `<!-- BUGREPORT_JSON_END -->`
+- Schema in JSON:
+  - `app_version`: `string`
+  - `version_code`: `int`
+  - `form_factor`: `string` ("PHONE" | "LAPTOP")
+  - `screen_width_bucket`: `string` ("COMPACT" | "MEDIUM" | "EXPANDED")
+  - `scoreboard_state`: `{ tour_filter, current_tournament, match_type_filter, match_filter, is_offline, total_matches, filtered_matches, live_matches, followed_matches }`
+  - `settings_snapshot`: `{ auto_refresh_interval, match_retention, widget_sync_mode, default_tournament, telemetry_enabled }`
+  - `match_context`: optional `{ match_id, tournament_name, tournament_id, event_grouping, effective_tour, effective_category, state, court }`
+  - `breadcrumbs`: `list of { timestamp, tag, message }`
 
 ## Code Layout & Write Ownership
 - **Milestone 1 Exclusives**:
-  - `app/src/main/java/com/tennis/tracker/data/local/H2HDataProvider.kt`
-  - `app/src/main/java/com/tennis/tracker/data/local/MockH2HData.kt`
-  - `app/src/main/java/com/tennis/tracker/data/local/MockTournamentData.kt`
-  - `app/src/test/java/com/tennis/tracker/data/local/MockTournamentData.kt`
-  - `app/src/main/java/com/tennis/tracker/data/remote/EspnWatchApi.kt`
-  - `app/src/main/java/com/tennis/tracker/util/TimezoneFormatter.kt`
-  - `app/src/test/java/com/tennis/tracker/domain/H2HTest.kt`
+  - `app/src/main/java/com/tennis/tracker/domain/model/bugreport/`
+  - `app/src/main/java/com/tennis/tracker/data/diagnostic/`
+  - `app/src/test/java/com/tennis/tracker/data/diagnostic/`
 - **Milestone 2 Exclusives**:
-  - `app/src/main/java/com/tennis/tracker/domain/model/TourType.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/TournamentCategory.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/CourtSurface.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/Tournament.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/TournamentResolver.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/Match.kt`
-  - `app/src/main/java/com/tennis/tracker/domain/model/H2H.kt` (import CourtSurface)
+  - `telemetry_dashboard/worker.js`
+  - `app/src/main/java/com/tennis/tracker/data/bugreport/`
+  - `app/src/test/java/com/tennis/tracker/data/bugreport/`
 - **Milestone 3 Exclusives**:
-  - `app/src/main/java/com/tennis/tracker/ui/viewmodel/TourTierFilter.kt`
-  - `app/src/main/java/com/tennis/tracker/ui/viewmodel/ScoreboardViewModel.kt`
-  - `app/src/main/java/com/tennis/tracker/ui/screen/ScoreboardScreen.kt`
+  - `app/src/main/java/com/tennis/tracker/ui/bugreport/`
+  - `app/src/main/java/com/tennis/tracker/ui/screen/ScoreboardScreen.kt` (TopAppBar & About dialog touchpoints)
+  - `app/src/main/java/com/tennis/tracker/ui/screen/MatchCopyBottomSheet.kt` (Contextual entry point)
 - **Milestone 4 Exclusives**:
-  - `app/src/main/java/com/tennis/tracker/data/repository/ScoreboardRepositoryImpl.kt`
-  - `app/src/main/java/com/tennis/tracker/data/remote/EspnScoreboardApi.kt`
-  - `app/src/main/java/com/tennis/tracker/data/remote/EspnWatchMatcher.kt`
-  - `app/src/main/java/com/tennis/tracker/data/remote/YouTubeHighlightResolver.kt`
-  - `app/src/main/java/com/tennis/tracker/data/remote/TennisStatsApi.kt`
+  - `.github/workflows/bug-triage.yml`
+  - `scripts/triage_bug_report.py`
+  - `scripts/test_triage_bug_report.py`
 - **Milestone 5 Exclusives**:
-  - `app/src/test/java/com/tennis/tracker/domain/DynamicYearResolutionTest.kt`
-  - `app/src/test/java/com/tennis/tracker/domain/TournamentClassificationTest.kt`
-  - `app/src/test/java/com/tennis/tracker/ui/TieredFilterViewModelTest.kt`
-  - `app/src/test/java/com/tennis/tracker/data/CollectionPipelineOptimizationTest.kt`
-  - E2E testing test runner & verification scripts
+  - `app/src/test/java/com/tennis/tracker/e2e/`
+  - Full regression execution across all modules

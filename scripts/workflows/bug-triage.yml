@@ -1,0 +1,114 @@
+name: Agentic Bug Report Triage & Auto-Fix PR
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'GitHub Issue number to triage and create a fix branch/PR for'
+        required: true
+        type: number
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: bug-triage-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  triage-and-fix:
+    name: Agent Triage & Auto-Branch/PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && (
+        contains(github.event.issue.labels.*.name, 'in-app-report') ||
+        contains(github.event.issue.labels.*.name, 'bug') ||
+        contains(github.event.issue.labels.*.name, 'agent-approved') ||
+        contains(github.event.issue.labels.*.name, 'auto-fix') ||
+        (github.event.label && (
+          github.event.label.name == 'in-app-report' ||
+          github.event.label.name == 'bug' ||
+          github.event.label.name == 'agent-approved' ||
+          github.event.label.name == 'auto-fix'
+        )) ||
+        contains(github.event.issue.body, 'BUGREPORT_JSON_START') ||
+        github.event.issue.user.login == 'yurilo'
+      )) ||
+      (github.event_name == 'issue_comment' &&
+        github.event.comment.user.login == 'yurilo' && (
+          contains(github.event.comment.body, '/approve') ||
+          contains(github.event.comment.body, '/fix') ||
+          contains(github.event.comment.body, '/agent-fix')
+        ))
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run triage script unit tests
+        run: |
+          python3 -m unittest discover -s scripts -p "test_*.py"
+
+      - name: Configure git identity for agent branch creation
+        run: |
+          git config user.name "tennis-tracker-agent[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run agentic triage, branch creation & Pull Request workflow
+        id: triage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR_LOGIN: ${{ github.actor }}
+          DISPATCH_ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python3 scripts/triage_bug_report.py \
+              --issue-number "${{ inputs.issue_number }}" \
+              --repo "${{ github.repository }}" \
+              --token "${{ secrets.GITHUB_TOKEN }}" \
+              --auto-branch-pr \
+              --approved-by "${{ github.actor }}" \
+              --output triage_report.md
+          else
+            python3 scripts/triage_bug_report.py \
+              --issue-event "${{ github.event_path }}" \
+              --repo "${{ github.repository }}" \
+              --token "${{ secrets.GITHUB_TOKEN }}" \
+              --auto-branch-pr \
+              --approved-by "${{ github.actor }}" \
+              --output triage_report.md
+          fi
+
+      - name: Upload triage report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-report-${{ github.event.issue.number || inputs.issue_number }}
+          path: triage_report.md
+          if-no-files-found: ignore
+
+      - name: Add triage report to Job Summary
+        if: always()
+        run: |
+          if [ -f triage_report.md ]; then
+            cat triage_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+

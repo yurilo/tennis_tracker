@@ -6,6 +6,7 @@
  * - HTML entity escaping on all user-supplied metadata (Stored XSS mitigation)
  * - Optimized KV writes (1 write per unique DAU, capped ring buffer)
  * - Edge cached stats endpoint (Cache-Control: 60s) to preserve list quotas
+ * - In-App Bug Reporting relay with KV rate limiting & GitHub API integration
  */
 
 function escapeHtml(str) {
@@ -18,6 +19,31 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// Category taxonomy mapping to canonical display names, enum constants, and GitHub label slugs
+const CATEGORY_MAP = {
+  "filter-tour": { slug: "filter-tour", name: "FILTER_TOUR_MISMATCH", displayName: "Filter / Tour Mismatch" },
+  "filter_tour_mismatch": { slug: "filter-tour", name: "FILTER_TOUR_MISMATCH", displayName: "Filter / Tour Mismatch" },
+  "filter / tour mismatch": { slug: "filter-tour", name: "FILTER_TOUR_MISMATCH", displayName: "Filter / Tour Mismatch" },
+
+  "score-live-data": { slug: "score-live-data", name: "SCORE_LIVE_DATA", displayName: "Score / Live Data" },
+  "score_live_data": { slug: "score-live-data", name: "SCORE_LIVE_DATA", displayName: "Score / Live Data" },
+  "score / live data": { slug: "score-live-data", name: "SCORE_LIVE_DATA", displayName: "Score / Live Data" },
+
+  "watch-highlights": { slug: "watch-highlights", name: "WATCH_HIGHLIGHTS", displayName: "Watch / Highlights" },
+  "watch_highlights": { slug: "watch-highlights", name: "WATCH_HIGHLIGHTS", displayName: "Watch / Highlights" },
+  "watch / highlights": { slug: "watch-highlights", name: "WATCH_HIGHLIGHTS", displayName: "Watch / Highlights" },
+
+  "home-widget": { slug: "home-widget", name: "HOME_WIDGET", displayName: "Home Widget" },
+  "home_widget": { slug: "home-widget", name: "HOME_WIDGET", displayName: "Home Widget" },
+  "home widget": { slug: "home-widget", name: "HOME_WIDGET", displayName: "Home Widget" },
+
+  "ui-layout": { slug: "ui-layout", name: "UI_LAYOUT", displayName: "UI / Layout" },
+  "ui_layout": { slug: "ui-layout", name: "UI_LAYOUT", displayName: "UI / Layout" },
+  "ui / layout": { slug: "ui-layout", name: "UI_LAYOUT", displayName: "UI / Layout" },
+
+  "other": { slug: "other", name: "OTHER", displayName: "Other" }
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -25,14 +51,223 @@ export default {
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, User-Agent",
+      "Access-Control-Allow-Headers": "Content-Type, User-Agent, X-Client-Version",
+      "Access-Control-Max-Age": "86400"
     };
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // 1. Ingestion Endpoint: POST /api/heartbeat
+    // =========================================================================
+    // 1. In-App Bug Reporting Relay: POST /bug-report or /api/bug-report
+    // =========================================================================
+    if (url.pathname === "/bug-report" || url.pathname === "/api/bug-report") {
+      if (request.method !== "POST") {
+        return new Response(JSON.stringify({
+          error: "Method Not Allowed. Use POST for bug reports."
+        }), {
+          status: 405,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Check GitHub token configuration on relay
+      const githubToken = env.GITHUB_TOKEN;
+      if (!githubToken || typeof githubToken !== "string" || githubToken.trim() === "") {
+        return new Response(JSON.stringify({
+          fallback_required: true,
+          reason: "RELAY_TOKEN_UNCONFIGURED",
+          error: "GitHub relay token not configured on worker"
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Parse JSON payload
+      let body;
+      try {
+        body = await request.json();
+      } catch (err) {
+        return new Response(JSON.stringify({
+          error: "Invalid JSON payload"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      if (!body || typeof body !== "object") {
+        return new Response(JSON.stringify({
+          error: "Empty or invalid payload"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Validate & sanitize summary
+      const rawSummary = typeof body.summary === "string" ? body.summary.trim() : "";
+      if (!rawSummary) {
+        return new Response(JSON.stringify({
+          error: "Missing required fields: summary cannot be empty"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+      const summary = rawSummary.slice(0, 500);
+
+      // Validate & sanitize body / description
+      const rawBody = typeof body.body === "string" ? body.body.trim() :
+                      (typeof body.description === "string" ? body.description.trim() : "");
+      if (!rawBody) {
+        return new Response(JSON.stringify({
+          error: "Missing required fields: description or body cannot be empty"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // Validate & normalize category
+      const rawCategory = typeof body.category === "string" ? body.category.trim() : "";
+      if (!rawCategory) {
+        return new Response(JSON.stringify({
+          error: "Missing required fields: category cannot be empty"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      const normalizedKey = rawCategory.toLowerCase();
+      const categoryInfo = CATEGORY_MAP[normalizedKey];
+      if (!categoryInfo) {
+        return new Response(JSON.stringify({
+          error: `Invalid category: ${rawCategory}`
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+
+      // KV Rate Limiting: 5 requests per 10 minutes per IP/client identifier
+      const clientIp = request.headers.get("cf-connecting-ip") ||
+                       request.headers.get("x-real-ip") ||
+                       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+                       "127.0.0.1";
+
+      const kv = env.TELEMETRY_KV || env.BUGREPORT_KV;
+      if (kv) {
+        const rateLimitKey = `ratelimit:bugreport:${clientIp}`;
+        const now = Date.now();
+        let rateRecord = null;
+        const rawRecord = await kv.get(rateLimitKey);
+        if (rawRecord) {
+          try {
+            rateRecord = JSON.parse(rawRecord);
+          } catch (_) {
+            rateRecord = { count: parseInt(rawRecord, 10) || 0, resetAt: now + 600000 };
+          }
+        }
+
+        if (rateRecord && rateRecord.resetAt > now) {
+          if (rateRecord.count >= 5) {
+            const retryAfterSec = Math.max(1, Math.ceil((rateRecord.resetAt - now) / 1000));
+            return new Response(JSON.stringify({
+              error: "Rate limit exceeded. Maximum 5 bug reports per 10 minutes.",
+              reason: "RATE_LIMIT_EXCEEDED",
+              retry_after: retryAfterSec
+            }), {
+              status: 429,
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json",
+                "Retry-After": retryAfterSec.toString()
+              }
+            });
+          }
+          rateRecord.count += 1;
+          const ttlSeconds = Math.max(60, Math.ceil((rateRecord.resetAt - now) / 1000));
+          await kv.put(rateLimitKey, JSON.stringify(rateRecord), { expirationTtl: ttlSeconds });
+        } else {
+          rateRecord = { count: 1, resetAt: now + 600000 };
+          await kv.put(rateLimitKey, JSON.stringify(rateRecord), { expirationTtl: 600 });
+        }
+      }
+
+      // Construct issue body if diagnostic_snapshot is provided separately
+      let fullIssueBody = rawBody.slice(0, 65536);
+      if (body.diagnostic_snapshot && typeof body.diagnostic_snapshot === "object" && !fullIssueBody.includes("<!-- BUGREPORT_JSON_START -->")) {
+        const jsonBlock = JSON.stringify(body.diagnostic_snapshot, null, 2);
+        fullIssueBody += `\n\n<details>\n<summary>Diagnostic Bugreport Bundle (Machine-Readable JSON)</summary>\n\n<!-- BUGREPORT_JSON_START -->\n${jsonBlock}\n<!-- BUGREPORT_JSON_END -->\n</details>`;
+      }
+
+      // Format issue title & labels
+      const issueTitle = summary.startsWith("[") ? summary : `[${categoryInfo.displayName}] ${summary}`;
+      const labels = ["bug", "in-app-report", categoryInfo.slug];
+
+      const githubRepo = env.GITHUB_REPO || "yurilo/tennis_tracker";
+      const githubUrl = `https://api.github.com/repos/${githubRepo}/issues`;
+
+      try {
+        const githubRes = await fetch(githubUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${githubToken.trim()}`,
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "TennisTracker-BugReport-Relay/1.0",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28"
+          },
+          body: JSON.stringify({
+            title: issueTitle,
+            body: fullIssueBody,
+            labels: labels
+          })
+        });
+
+        const githubData = await githubRes.json().catch(() => ({}));
+
+        if (!githubRes.ok) {
+          return new Response(JSON.stringify({
+            success: false,
+            fallback_required: true,
+            reason: "GITHUB_API_ERROR",
+            error: githubData.message || `GitHub returned HTTP ${githubRes.status}`,
+            status_code: githubRes.status
+          }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          issue_number: githubData.number,
+          issue_url: githubData.html_url
+        }), {
+          status: 201,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (fetchErr) {
+        return new Response(JSON.stringify({
+          success: false,
+          fallback_required: true,
+          reason: "RELAY_NETWORK_ERROR",
+          error: `Failed to contact GitHub: ${fetchErr.message}`
+        }), {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    // =========================================================================
+    // 2. Telemetry Ingestion Endpoint: POST /api/heartbeat or /api/ping
+    // =========================================================================
     if (request.method === "POST" && (url.pathname === "/api/heartbeat" || url.pathname === "/api/ping")) {
       try {
         const body = await request.json();
@@ -97,7 +332,9 @@ export default {
       }
     }
 
-    // 2. Stats API: GET /api/stats (Edge cached for 60s to prevent KV list quota exhaustion)
+    // =========================================================================
+    // 3. Stats API: GET /api/stats (Edge cached for 60s)
+    // =========================================================================
     if (request.method === "GET" && url.pathname === "/api/stats") {
       let stats = {
         totalPings: 0,
@@ -124,7 +361,9 @@ export default {
       });
     }
 
-    // 3. Live Dashboard UI: GET / (All user output HTML escaped)
+    // =========================================================================
+    // 4. Live Dashboard UI: GET / or /dashboard
+    // =========================================================================
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/dashboard")) {
       let totalPings = 0;
       let todayActive = 0;
