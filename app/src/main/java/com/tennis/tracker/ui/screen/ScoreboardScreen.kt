@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -44,6 +45,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -80,6 +82,7 @@ import com.tennis.tracker.ui.theme.UsOpenNavyDark
 import com.tennis.tracker.ui.util.AdaptiveLayoutUtils
 import com.tennis.tracker.ui.util.FormFactorLayoutConfig
 import com.tennis.tracker.ui.util.rememberFormFactorLayoutConfig
+import com.tennis.tracker.ui.viewmodel.BugReportViewModel
 import com.tennis.tracker.ui.viewmodel.MatchFilter
 import com.tennis.tracker.ui.viewmodel.MatchTypeFilter
 import com.tennis.tracker.ui.viewmodel.ScoreboardViewModel
@@ -91,6 +94,7 @@ import com.tennis.tracker.util.IntentLauncher
 @Composable
 fun ScoreboardScreen(
     viewModel: ScoreboardViewModel,
+    bugReportViewModel: BugReportViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -105,6 +109,8 @@ fun ScoreboardScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var selectedMatchForCopy by remember { mutableStateOf<Match?>(null) }
+    var showBugReportSheet by remember { mutableStateOf(false) }
+    var targetMatchForBugReport by remember { mutableStateOf<Match?>(null) }
 
     val packageInfo = remember(context) {
         try {
@@ -192,6 +198,18 @@ fun ScoreboardScreen(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "About Tennis Tracker",
+                            tint = UsOpenGold
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            targetMatchForBugReport = null
+                            showBugReportSheet = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = "Report a Bug",
                             tint = UsOpenGold
                         )
                     }
@@ -562,7 +580,12 @@ fun ScoreboardScreen(
     if (matchForCopy != null) {
         MatchCopyBottomSheet(
             match = matchForCopy,
-            onDismiss = { selectedMatchForCopy = null }
+            onDismiss = { selectedMatchForCopy = null },
+            onReportMatchBug = { matchToReport ->
+                selectedMatchForCopy = null
+                targetMatchForBugReport = matchToReport
+                showBugReportSheet = true
+            }
         )
     }
 
@@ -605,6 +628,21 @@ fun ScoreboardScreen(
             onTelemetryEndpointChanged = { viewModel.updateTelemetryEndpoint(it) },
             onResetToDefaults = { viewModel.resetSettingsToDefaults() },
             onDismiss = { showSettingsSheet = false }
+        )
+    }
+
+    // Modal Bottom Sheet for Privacy-Safe In-App Bug Reporting (shown on-demand)
+    if (showBugReportSheet) {
+        BugReportBottomSheet(
+            targetMatch = targetMatchForBugReport,
+            scoreboardState = state,
+            settings = settings,
+            viewModel = bugReportViewModel,
+            onDismiss = {
+                bugReportViewModel.reset()
+                showBugReportSheet = false
+                targetMatchForBugReport = null
+            }
         )
     }
 
@@ -717,7 +755,77 @@ fun ScoreboardScreen(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        androidx.compose.foundation.text.selection.DisableSelection {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        showAboutDialog = false
+                                        targetMatchForBugReport = null
+                                        showBugReportSheet = true
+                                    }
+                                    .background(if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.BugReport,
+                                        contentDescription = null,
+                                        tint = if (isDark) UsOpenGold else UsOpenNavy,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Report an Issue",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Send diagnostic logs or report a bug",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Report →",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDark) UsOpenGold else UsOpenNavy
+                                )
+                            }
+                        }
                     }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showAboutDialog = false
+                        targetMatchForBugReport = null
+                        showBugReportSheet = true
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BugReport,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isDark) UsOpenGold else UsOpenNavy
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Report Issue",
+                        color = if (isDark) UsOpenGold else UsOpenNavy
+                    )
                 }
             },
             confirmButton = {

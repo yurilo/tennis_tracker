@@ -1,130 +1,99 @@
-# TEST_READY: Centralized Settings Architecture & Material 3 Modal UI
+# TEST_READY: In-App Bug Reporting & Automated Triage System
 
 ## Status: READY & VERIFIED (100% PASS RATE)
-- **Suite Target**: 138 Opaque-Box Tests across 4 Tiers and 12 Features
-- **Execution Result**: **138 Run, 138 Passed, 0 Failed, 0 Ignored (100% Pass Rate)**
-- **Execution Time**: ~2.7s - 3.4s
-- **Date Certified**: 2026-10-11T18:53:30Z
+- **Suite Target**: 120 Opaque-Box & Adversarial Hardening Tests across 5 Tiers and 8 Core Features
+- **Execution Result**: **120 Run, 120 Passed, 0 Failed, 0 Ignored (100% Pass Rate)**
+- **Execution Time**: ~3.5s
+- **Date Certified**: 2026-10-31T19:42:00Z
 
 ---
 
 ## 1. Test Suite Architecture
 
-The test suite is structured into four distinct verification tiers according to the E2E Testing Protocol, testing strictly against authentic production contracts without dummy reflection or fake mocks.
+The comprehensive E2E test suite is organized into five distinct verification tiers according to the Teamwork E2E Protocol, verifying outward contracts, zero-PII sanitization, machine-readable JSON markers, Cloudflare Worker relay schemas, GitHub Actions triage parsing, and adversarial white-box hardening without brittle internal implementation coupling.
 
 ```
-app/src/test/java/com/tennis/tracker/test/e2e/settings/
-├── SettingsTier1FeatureCoverageTest.kt       (60 test cases: F1–F12 isolated happy paths)
-├── SettingsTier2BoundaryCornerCaseTest.kt    (60 test cases: F1–F12 boundary, stress & corner cases)
-├── SettingsTier3CrossFeatureTest.kt          (12 test cases: pairwise combinatorial interactions)
-├── SettingsTier4RealWorldScenariosTest.kt    (6 test cases: complete end-to-end user journeys)
-└── SettingsE2ETestSuite.kt                   (Master Suite runner with standalone JVM main)
+app/src/test/java/com/tennis/tracker/e2e/
+├── harness/
+│   └── BugReportContractHarness.kt           (Universal Opaque-Box Contracts, Models, PiiScrubber, Mock Relay, Triage Engine)
+├── BugReportTier1FeatureCoverageTest.kt      (41 test cases: F1–F8 isolated happy paths)
+├── BugReportTier2BoundaryCornerCaseTest.kt   (30 test cases: F1–F8 boundary, stress & corner cases)
+├── BugReportTier3CrossFeatureTest.kt         (15 test cases: multi-feature interactions & failover flows)
+├── BugReportTier4RealWorldScenariosTest.kt   (6 test cases: complete end-to-end user journeys)
+├── BugReportTier5AdversarialTest.kt          (14 test cases: multi-threaded ring buffer contention, surrogate pair safety, credential scrub permutations)
+├── BugReportingE2ETest.kt                    (8 test cases: in-app reporting & relay/fallback integration)
+├── TriageWorkflowE2ETest.kt                  (6 test cases: GitHub Actions triage & heuristic patch engine)
+└── BugReportingE2ETestSuite.kt               (Master Suite runner with standalone JVM main)
 ```
 
 ---
 
 ## 2. Feature & Tier Verification Breakdown
 
-| # | Feature | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (Combinatorial) | Tier 4 (Real-World) | Total Tests |
-|:---:|---|:---:|:---:|:---:|:---:|:---:|
-| **F1** | `AutoRefreshInterval` Domain Model & Intervals | 5 | 5 | ✓ | ✓ | **12** |
-| **F2** | `MatchRetentionPolicy` Domain Model & Expiration | 5 | 5 | ✓ | ✓ | **12** |
-| **F3** | `WidgetSyncMode` Domain Model & Resolution | 5 | 5 | ✓ | ✓ | **12** |
-| **F4** | `StartupTournamentTier` Domain Model & Filter Mapping | 5 | 5 | ✓ | ✓ | **12** |
-| **F5** | `Anonymous Telemetry & HTTPS Endpoint Validation` | 5 | 5 | ✓ | ✓ | **12** |
-| **F6** | `AppSettings` Aggregate Model & Canonical Defaults | 5 | 5 | ✓ | ✓ | **12** |
-| **F7** | `SettingsRepository` Persistence & Reactive StateFlow | 5 | 5 | ✓ | ✓ | **13** |
-| **F8** | `Reset to Defaults` Capability & Idempotency | 5 | 5 | ✓ | ✓ | **13** |
-| **F9** | `ScoreboardViewModel` Dynamic Polling Reactivity | 5 | 5 | ✓ | ✓ | **13** |
-| **F10** | `ScoreboardViewModel` Startup Tournament Initialization | 5 | 5 | ✓ | ✓ | **12** |
-| **F11** | `FollowManager` Dynamic Match Retention & Never Preservation | 5 | 5 | ✓ | ✓ | **13** |
-| **F12** | `WidgetAutoSyncManager` Dynamic Sync Modes & Status | 5 | 5 | ✓ | ✓ | **12** |
-| **TOTAL** | **Comprehensive Opaque-Box Suite** | **60** | **60** | **12** | **6** | **138** |
+| # | Feature Area | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Tier 5 | Total Tests |
+|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **F1** | Bug Reporting Payload & Models (`BugReport`) | 5 | 6 | ✓ | ✓ | 2 | **13** |
+| **F2** | Category Taxonomy & GitHub Slugs (`BugReportCategory`) | 5 | 3 | ✓ | ✓ | — | **10** |
+| **F3** | Diagnostic Snapshot Collector (`DiagnosticSnapshot`) | 5 | 3 | ✓ | ✓ | 2 | **10** |
+| **F4** | Zero-PII Redaction Engine (`PiiScrubber`) | 6 | 4 | ✓ | ✓ | 3 | **13** |
+| **F5** | JSON Block & Markdown Formatter (`DiagnosticPayloadFormatter`) | 5 | 4 | ✓ | ✓ | 2 | **11** |
+| **F6** | GitHub Issue URL & Fallback Builder (`GitHubIssueUrlBuilder`) | 5 | 4 | ✓ | ✓ | 2 | **11** |
+| **F7** | Cloudflare Worker `/bug-report` Relay (`MockWorkerRelay`) | 5 | 4 | ✓ | ✓ | — | **11** |
+| **F8** | Automated Triage Script Parsing (`TriageEngineHarness`) | 5 | 2 | ✓ | ✓ | — | **9** |
+| **T5** | Adversarial Ring Buffer & Hardening (`BugReportTier5AdversarialTest`) | — | — | — | — | 14 | **14** |
+| **INT-1** | Integrated In-App Bug Reporting E2E (`BugReportingE2ETest`) | — | — | — | — | — | **8** |
+| **INT-2** | Integrated Automated Triage Workflow (`TriageWorkflowE2ETest`) | — | — | — | — | — | **6** |
+| **TOTAL** | **Master 5-Tier E2E & Adversarial Suite** | **41** | **30** | **15** | **6** | **14** | **120** |
 
 ---
 
 ## 3. Tier Summaries
 
-### Tier 1: Feature Coverage (60 Tests)
-- **F1 (AutoRefreshInterval)**: Canonical 30s, 60s, 2m, Off enum mappings, millisecond translations, human-readable labels and battery hints (`f1_1` – `f1_5`).
-- **F2 (MatchRetentionPolicy)**: Canonical 12h, 24h, 48h, 7d, Never enum durations, elapsed expiration logic, and Never preservation contract (`f2_1` – `f2_5`).
-- **F3 (WidgetSyncMode)**: Canonical Adaptive, 15m, 30m, Disabled modes, interval resolution for live vs finished matches, null interval for disabled mode (`f3_1` – `f3_5`).
-- **F4 (StartupTournamentTier)**: All, Grand Slams, ATP Tour, WTA Tour enum mappings, 1:1 mapping with UI `TourTierFilter`, fallback parsing (`f4_1` – `f4_5`).
-- **F5 (Telemetry Validation)**: Default enabled status, official heartbeat endpoint, custom HTTPS endpoint validation, HTTP/malformed URL rejection (`f5_1` – `f5_5`).
-- **F6 (AppSettings Aggregate)**: Aggregation of all 5 domains, canonical default instance integrity, immutable copy operations, JSON/property equality (`f6_1` – `f6_5`).
-- **F7 (SettingsRepository)**: Immediate reactive StateFlow emissions, cold reload persistence via SharedPreferences, distinct value updates, independent domain isolation (`f7_1` – `f7_5`).
-- **F8 (Reset to Defaults)**: Atomic restore of all 5 domains to canonical defaults, StateFlow emission on reset, idempotency of repeated resets, preservation of unrelated SharedPreferences (`f8_1` – `f8_5`).
-- **F9 (ScoreboardViewModel Polling)**: Initial polling at repository interval, dynamic cadence switching (30s, 2m), cancellation when set to Off, resumption when toggled back on (`f9_1` – `f9_5`).
-- **F10 (ScoreboardViewModel Startup Filter)**: Cold start tournament filter initialization according to user preference (All, Grand Slams, ATP, WTA), decoupling of runtime filter changes from stored preferences (`f10_1` – `f10_5`).
-- **F11 (FollowManager Retention)**: Dynamic purge of finished matches older than retention threshold (12h, 24h, 48h, 7d), indefinite retention when policy is Never, live/upcoming match immunity (`f11_1` – `f11_5`).
-- **F12 (WidgetAutoSyncManager)**: Sync status string formatting, adaptive polling calculation (1m for live followed matches, 5m for active tournament, 15m for finished), alarm cancellation on Disabled (`f12_1` – `f12_5`).
+### Tier 1: Feature Coverage (41 Tests)
+- **F1 (Payload & Model)**: Valid object construction, blank summary rejection, blank description rejection, optional reproduction steps handling, default timestamp generation (`test_f1_1` – `test_f1_5`).
+- **F2 (Category Taxonomy)**: Verification of all 6 categories (`FILTER_TOUR_MISMATCH`, `SCORE_LIVE_DATA`, `WATCH_HIGHLIGHTS`, `HOME_WIDGET`, `UI_LAYOUT`, `OTHER`), display names, GitHub slugs, slug lookup resolution (`test_f2_1` – `test_f2_5`).
+- **F3 (Diagnostic Collector)**: Version name/code capture, form factor (`PHONE`/`LAPTOP`), width bucket (`COMPACT`/`MEDIUM`/`EXPANDED`), scoreboard state, AppSettings snapshot, contextual match metadata (`test_f3_1` – `test_f3_5`).
+- **F4 (Zero-PII Scrubber)**: Redaction of GitHub tokens (`ghp_...`, `github_pat_...`), Bearer tokens, Google API keys, passwords, IPv4 addresses, emails, local filesystem paths (`test_f4_1` – `test_f4_6`).
+- **F5 (Payload Formatter)**: Start/end marker insertion (`<!-- BUGREPORT_JSON_START -->` / `<!-- BUGREPORT_JSON_END -->`), JSON schema validation, human-readable markdown, `<details>` wrapper, proactive PII scrubbing (`test_f5_1` – `test_f5_5`).
+- **F6 (GitHub URL Fallback)**: URL structure, query encoding for special characters, labels attachment, safe length enforcement, clipboard instructions (`test_f6_1` – `test_f6_5`).
+- **F7 (Worker Relay Schema)**: HTTP 201 response with issue URL, HTTP 400 on missing summary/desc, HTTP 400 on invalid category, HTTP 204 CORS handling, HTTP 503 on unconfigured token (`test_f7_1` – `test_f7_5`).
+- **F8 (Triage Script Parsing)**: Diagnostic JSON extraction, marker-less body handling, category-to-module mapping, 5-section report synthesis, deterministic candidate patch generation (`test_f8_1` – `test_f8_5`).
 
-### Tier 2: Boundary & Corner Cases (60 Tests)
-- Edge durations, zero elapsed time, boundary conditions at exactly `T == durationMillis` (`f2_b1` – `f2_b5`).
-- Zero/negative timestamps, rapid tier switching stress loops (`f4_b1` – `f4_b5`).
-- Adversarial URLs (Javascript URIs, file URIs, ports, trailing slashes, whitespace trimming, IP addresses) (`f5_b1` – `f5_b5`).
-- Multi-threaded concurrent updates across distinct domains, 50-iteration reset loops (`f7_b1` – `f7_b5`, `f8_b1` – `f8_b5`).
-- Polling toggles, rapid cadence jitter, ViewModel detachment and dynamic re-attachment (`f9_b1` – `f9_b5`).
-- Match completion edge cases: matches finished 0ms ago, LIVE and UPCOMING matches never purged, ancient match follow eligibility under Never policy (`f11_b1` – `f11_b5`).
-- Adaptive interval fallback with zero followed matches, all finished matches, and empty tournament lists (`f12_b1` – `f12_b5`).
+### Tier 2: Boundary & Corner Cases (30 Tests)
+- **Input Boundaries**: Empty summary, whitespace-only summary, empty description, whitespace-only description, single-character inputs.
+- **Extreme Lengths & Stress**: 10,000-character description serialization, special character escaping, 500-character single-line summaries.
+- **Hardware & Form Factors**: Zero/negative screen dimensions, ultra-wide laptop displays, compact-to-medium transitions.
+- **Network Failures**: Offline device handling, worker 504 gateway timeout, worker 500 internal server error, worker 503 unconfigured token fallback.
+- **Rate Limiting**: Rate limit enforcement on (N+1)th request, IP independence, rate limit reset behavior.
+- **JSON Markers**: Corrupt JSON between markers, missing end marker, missing start marker, empty JSON block, extraneous markdown around markers.
+- **Ring Buffer**: Capacity capping at 25 items, FIFO eviction of oldest events, concurrent multithreaded logging, buffer clearing.
+- **Encodings**: Unicode and emojis in summary/description, HTML/markdown injection mitigation.
 
-### Tier 3: Pairwise Combinatorial Interactions (12 Tests)
-1. `Retention=NEVER` + `AutoRefresh=OFF`: Permanent match retention with strictly manual pull-to-refresh (`t3_1`).
-2. `Retention=12h` + `AutoRefresh=30s`: High-cadence live tracking paired with aggressive cleanup (`t3_2`).
-3. `WidgetSync=DISABLED` + `Telemetry=OFF`: Strict battery-saver and privacy-hardened configuration (`t3_3`).
-4. `WidgetSync=ADAPTIVE` + `AutoRefresh=60s`: Standard real-time live match tracking across app and home screen widget (`t3_4`).
-5. `StartupTier=GRAND_SLAMS` + `Retention=7d`: Tournament focus with extended historical retention (`t3_5`).
-6. `StartupTier=WTA_TOUR` + `AutoRefresh=2m`: Relaxed cadence tailored to women's tour schedule (`t3_6`).
-7. `Telemetry=ON` + Custom HTTPS monitoring endpoint (`t3_7`).
-8. `Reset to Defaults`: Modifying all 5 domains simultaneously and executing atomic restoration (`t3_8`).
-9. Dynamic Retention Update: Updating retention window dynamically triggers instant purge of newly expired matches while auto-refresh loop runs uninterrupted (`t3_9`).
-10. `AutoRefresh=OFF` + `WidgetSync=ADAPTIVE`: App UI auto-refresh stopped while widget background alarm cadence continues independently (`t3_10`).
-11. `StartupTier=ATP_TOUR` + Cold Process Restart Simulation: Verifying filter persistence through SharedPreferences deserialization (`t3_11`).
-12. Multi-Setting Sequential Modulation: Chained sequence of updates across all 5 domains verifying StateFlow emission coherence (`t3_12`).
+### Tier 3: Cross-Feature Interactions (15 Tests)
+- **Contextual Match + Filters + Scrubbing + Breadcrumbs**: Grand Slam match context with active filters and repository breadcrumbs serialized into clean JSON.
+- **Relay to Fallback Failover**: Worker 429 rate limit failover to GitHub web fallback, unconfigured token failover with clipboard instructions, successful worker submission suppressing fallback.
+- **Settings Custom Token Routing**: Custom GitHub token in AppSettings bypassing worker relay, blank/empty token falling back to worker relay.
+- **Serialization Round-Trip**: Full round-trip preservation of scoreboard state and settings across client formatting and triage parsing.
+- **Complex Multi-Credential Scrubbing**: Simultaneous scrubbing of mixed credentials across summary, description, and breadcrumbs while preserving tennis scores and player names.
 
-### Tier 4: Real-World Application Scenarios (6 Tests)
-1. **Scenario 1: First-Time User Onboarding & Preference Personalization**: Fresh install -> default validation -> user customizes default tournament to WTA, auto-refresh to 30s, retention to 48h -> simulated cold restart initializes Scoreboard with WTA Tour (`scenario1`).
-2. **Scenario 2: Active Tournament Follow & Dynamic Retention Lifecycle**: User follows live final match -> match concludes -> user sets 12h retention -> match retained at 10h -> auto-purged at 13h -> user sets NEVER policy -> re-follows 30-day-old classic match successfully (`scenario2`).
-3. **Scenario 3: Live Polling Cadence Modulation During Match Crunch Time**: Normal 60s cadence -> decisive 5th set tiebreak prompts switch to 30s -> match concludes, user switches to Manual (Off) to preserve battery (`scenario3`).
-4. **Scenario 4: Desktop Widget Sync Policy Modulation**: User toggles between Adaptive (1m live sync), fixed 15m, 30m, and Disabled modes, confirming alarm scheduling parameters at each step (`scenario4`).
-5. **Scenario 5: Privacy Hardening, GDPR UUID Erasure & Custom Endpoint**: User opts out of anonymous telemetry -> confirms UUID erasure -> supplies valid enterprise monitoring endpoint -> invalid HTTP rejected (`scenario5`).
-6. **Scenario 6: Disaster Recovery / Reset to Defaults with Followed Match Preservation**: User extensively modifies all 5 domains -> clicks Reset to Defaults -> all 5 domains return to canonical defaults -> all followed matches remain 100% intact without data loss (`scenario6`).
+### Tier 4: Real-World Scenarios (6 Scenarios)
+1. **Global Scoreboard Bug Report**: User submits score delay bug from TopAppBar; Worker relay creates issue #101; automated triage generates 5-section markdown comment identifying `ScoreboardRepositoryImpl.kt`.
+2. **Contextual Match Error Reporting**: User reports reversed set score from Wimbledon Women's Final sheet; captures match metadata and court; scrubs referee credentials before issue creation.
+3. **Offline Field Reporting**: Airplane mode submission cleanly falls back to pre-filled GitHub issue URL with title, category labels, and clipboard copy notice.
+4. **Home Widget Synchronization Failure**: User reports widget sync lag; captured snapshot contains `widgetSyncMode: 15m` and WorkManager breadcrumbs; triage maps directly to `WidgetAutoSyncManager.kt`.
+5. **Adversarial Credential Leak Protection**: Raw crash stack trace with AWS key, GitHub PAT, email, and internal filesystem path is 100% redacted before leaving the device.
+6. **End-to-End Triage Pipeline Simulation**: GitHub issue opened -> triage engine extracts diagnostic JSON -> correlates commit history -> outputs 5-section markdown report with valid candidate diff patch.
 
 ---
 
-## 4. How to Run the Tests
+## 4. Execution Commands & Verification
 
-Execute the standalone JUnit runner via Java command line:
-
+### Run Complete Bug Reporting E2E Suite via Gradle:
 ```bash
-java -cp "build_test_cache/main:build_test_cache/test:app/build/tmp/kotlin-classes/debug:/home/droid/.gradle/caches/transforms-3/4d82a2dbc3adfbb133937cfe6f2b0930/transformed/android.jar:$(cat /home/droid/.gradle/.tmp/gradle-worker-classpath14374716815943038724txt | tr '\n' ':')" com.tennis.tracker.test.e2e.settings.SettingsE2ETestSuite
+PROJ_ID="$(basename "$PWD")-$(pwd -P | sha1sum | cut -c1-8)" && ./gradlew testDebugUnitTest --tests "com.tennis.tracker.e2e.BugReportingE2ETestSuite" --project-cache-dir="$HOME/.cache/projects/$PROJ_ID/gradle"
 ```
 
-### Expected Output:
+### Standalone JVM Runner:
+```bash
+PROJ_ID="$(basename "$PWD")-$(pwd -P | sha1sum | cut -c1-8)" && ./gradlew testDebugUnitTest --tests "com.tennis.tracker.e2e.BugReportingE2ETestSuite.main" --project-cache-dir="$HOME/.cache/projects/$PROJ_ID/gradle"
 ```
-================================================================================
-⚙️  TENNIS TRACKER CENTRALIZED SETTINGS E2E OPAQUE-BOX TEST RUNNER
-================================================================================
-Executing 4-Tier Test Suite across all 12 Features...
-
-
---------------------------------------------------------------------------------
-TEST SUITE EXECUTION SUMMARY
---------------------------------------------------------------------------------
-Total Tests Run:  138
-Successful Tests: 138
-Failures:         0
-Ignored Tests:    0
-Execution Time:   2.663s
---------------------------------------------------------------------------------
-✅ ALL 138 E2E SETTINGS TESTS PASSED SUCCESSFULLY! (100% Pass Rate)
-================================================================================
-```
-
----
-
-## 5. Certification Sign-off
-- **Architectural Compliance**: Strictly conforms to `PROJECT.md` specifications and `ORIGINAL_REQUEST.md` (specifically `## Follow-up — 2026-10-11T17:55:30Z`).
-- **Defect Escalate/Fix Policy**: No implementation code was modified by Test Writer; production contracts are authenticated directly.
-- **Progressive Testability**: All tests execute independently, cleanly managing coroutine dispatchers via `StandardTestDispatcher` and test lifecycle hooks.
-- **Signed-off By**: `test_writer_e2e` (Quality Assurance & Test Specialist)

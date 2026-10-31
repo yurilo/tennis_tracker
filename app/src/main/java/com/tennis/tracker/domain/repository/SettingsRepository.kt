@@ -53,6 +53,18 @@ interface SettingsRepository {
     suspend fun updateTelemetryEndpoint(endpoint: String)
 
     /**
+     * Persists and emits an updated custom bug report relay endpoint URL.
+     * Enforces secure HTTPS protocol or reverts to default if blank.
+     */
+    suspend fun updateBugReportEndpoint(endpoint: String) {}
+
+    /**
+     * Persists and emits an optional direct GitHub Personal Access Token override.
+     * If blank or null, clears the token from persistence and emits null.
+     */
+    suspend fun updateGithubToken(token: String?) {}
+
+    /**
      * Restores all settings back to canonical defaults and emits the updated state.
      */
     suspend fun resetToDefaults()
