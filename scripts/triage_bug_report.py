@@ -452,6 +452,40 @@ def correlate_source_files(
                         })
                         seen_paths.add(api_file)
 
+    # Keyword-based correlation from user problem description (e.g. when category is OTHER)
+    lower_text = str(user_text or "").lower()
+    if any(kw in lower_text for kw in ["tiebreak", "tie break", "tie-break", "30:30", "live score", "game score", "6:6"]):
+        tiebreak_files = [
+            {
+                "path": "app/src/main/java/com/tennis/tracker/data/remote/EspnScoreboardApi.kt",
+                "symbols": ["EspnScoreboardApi.parseCompetitors()", "EspnScoreboardApi.parseScoreboardJson()"],
+                "confidence": "HIGH",
+                "reason": "Parses live set scores, tiebreak scores, and fallback game point strings (e.g. 40/30 vs TB)",
+            },
+            {
+                "path": "app/src/main/java/com/tennis/tracker/ui/screen/MatchCard.kt",
+                "symbols": ["MatchCard.CompetitorRow()", "MatchCard.isValidTennisScore()"],
+                "confidence": "HIGH",
+                "reason": "Renders live game score pill and tiebreak superscripts during 6-6 sets",
+            },
+            {
+                "path": "app/src/main/java/com/tennis/tracker/data/repository/ScoreboardRepositoryImpl.kt",
+                "symbols": ["ScoreboardRepositoryImpl.getScoreboardInternal()"],
+                "confidence": "HIGH",
+                "reason": "Enriches live matches with point-by-point scores from TennisStatsApi",
+            },
+            {
+                "path": "app/src/main/java/com/tennis/tracker/ui/widget/FollowedMatchesWidgetService.kt",
+                "symbols": ["FollowedMatchesWidgetFactory.getGameScore()", "FollowedMatchesWidgetFactory.buildScoreSpannable()"],
+                "confidence": "MEDIUM",
+                "reason": "Formats live game and tiebreak scores for the home screen widget",
+            },
+        ]
+        for tf in reversed(tiebreak_files):
+            if tf["path"] not in seen_paths:
+                results.insert(0, tf)
+                seen_paths.add(tf["path"])
+
     return results
 
 
@@ -666,9 +700,23 @@ def call_llm_analyzer(
     return None
 
 
-def get_deterministic_candidate_patch(category: str) -> str:
+def get_deterministic_candidate_patch(category: str, user_text: str = "") -> str:
     """Provide parameterized high-fidelity unified diff patch for category."""
     norm_cat = category.upper()
+    lower_text = str(user_text or "").lower()
+    if any(kw in lower_text for kw in ["tiebreak", "tie break", "tie-break", "30:30", "6:6"]):
+        return """```diff
+--- a/app/src/main/java/com/tennis/tracker/data/remote/EspnScoreboardApi.kt
++++ b/app/src/main/java/com/tennis/tracker/data/remote/EspnScoreboardApi.kt
+@@ -435,6 +435,28 @@ class EspnScoreboardApi(
++            val p1LastSet = p1.setScores.lastOrNull()
++            val p2LastSet = p2.setScores.lastOrNull()
++            val isCurrentSetTiebreak = (p1LastSet != null && p2LastSet != null && p1LastSet >= 6 && p2LastSet >= 6 && p1LastSet == p2LastSet) ||
++                tb1 != null || tb2 != null
++
++            val resolvedP1Game = resolveLiveGameScore(p1, tb1, finalP1Serving, isCurrentSetTiebreak)
++            val resolvedP2Game = resolveLiveGameScore(p2, tb2, finalP2Serving, isCurrentSetTiebreak)
+```"""
     if norm_cat == "FILTER_TOUR_MISMATCH":
         return """```diff
 --- a/app/src/main/java/com/tennis/tracker/ui/viewmodel/ScoreboardViewModel.kt
@@ -753,6 +801,7 @@ def generate_triage_comment(
     suspected_files: List[Any],
     related_commits: List[Dict[str, str]],
     llm_result: Optional[Dict[str, str]] = None,
+    agent_pr_info: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Format structured 5-section Markdown triage report."""
     display_category = CATEGORY_DISPLAY_NAMES.get(category, category)
@@ -838,10 +887,23 @@ def generate_triage_comment(
             f"| **Recent Events** | {bc_desc} | Breadcrumb telemetry buffer |",
         ])
     else:
-        summary_lines.extend([
-            f"| **Category** | `{display_category}` | Extracted from issue labels/body |",
-            "| **Diagnostic Bundle** | *None attached* | Web or manual submission fallback |",
-        ])
+        env_match = re.search(
+            r"\*Environment:\s*App\s+v([^\s]+)\s+\((\d+)\),\s*([^,]+),\s*([^*]+)\*",
+            issue_body or "",
+            re.IGNORECASE,
+        )
+        if env_match:
+            summary_lines.extend([
+                f"| **App Version** | `{env_match.group(1)} ({env_match.group(2)})` | Extracted from web fallback footer |",
+                f"| **Form Factor** | `{env_match.group(3).strip()} ({env_match.group(4).strip()})` | Device display layout |",
+                f"| **Category** | `{display_category}` | Extracted from issue labels/body |",
+                "| **Diagnostic Bundle** | *Web fallback header* | Submitted via GitHub issue web fallback |",
+            ])
+        else:
+            summary_lines.extend([
+                f"| **Category** | `{display_category}` | Extracted from issue labels/body |",
+                "| **Diagnostic Bundle** | *None attached* | Web or manual submission fallback |",
+            ])
 
     if user_desc:
         quoted = "\n> ".join(user_desc.splitlines())
@@ -901,6 +963,14 @@ def generate_triage_comment(
         if user_desc:
             first_line = user_desc.splitlines()[0].strip()
             rca_lines.append(f"**Reported Symptom:** {first_line}")
+        lower_desc = (issue_body or "").lower()
+        if any(kw in lower_desc for kw in ["tiebreak", "tie break", "30:30", "6:6"]):
+            rca_lines.extend([
+                "",
+                "**Tiebreak Live Score Root-Cause Analysis:**",
+                "- In `EspnScoreboardApi.kt` (`parseCompetitors`), when a live match reaches `6-6` in games and ESPN's summary payload omits `linescores[].tiebreak` or `possession` flags, the fallback expression `lastSetTiebreak?.let { \"TB $it\" } ?: if (rawServing) \"40\" else \"30\"` evaluates `rawServing == false` for both players, assigning `\"30\"` (`30:30`) to both competitors during an active tiebreak.",
+                "- Additionally, when `TennisStatsApi.fetchLiveGameScores` or `EspnScoreboardApi` receives numeric tiebreak points (e.g. `2` and `2`) at `6-6`, `ScoreboardRepositoryImpl` and `MatchCard` need to normalize tiebreak points as `TB 2` and populate the current set's `tiebreakScores` so the set score (`6²`) and live game badge (`TB 2`) never display standard `15/30/40` game points at `6-6`.",
+            ])
         if anomalies:
             rca_lines.append("\n**State Anomalies & Inferences:**")
             for a in anomalies:
@@ -917,7 +987,7 @@ def generate_triage_comment(
         "## 🛠️ Proposed Patch & Verification Steps",
         "",
         "### Candidate Patch",
-        get_deterministic_candidate_patch(category),
+        get_deterministic_candidate_patch(category, user_text=issue_body),
         "",
         "### Independent Verification Steps",
         "Run the targeted Kotlin unit tests and project build inside the Linux VM redirecting the Gradle cache:",
@@ -944,6 +1014,33 @@ def generate_triage_comment(
         "```",
     ])
 
+    if agent_pr_info and isinstance(agent_pr_info, dict):
+        patch_lines.extend([
+            "",
+            "## 🚀 Agentic Fix Branch & Pull Request",
+            "",
+        ])
+        if agent_pr_info.get("approved"):
+            branch_name = agent_pr_info.get("branch_name", "")
+            branch_url = agent_pr_info.get("branch_url", "")
+            pr_url = agent_pr_info.get("pr_url", "")
+            pr_number = agent_pr_info.get("pr_number", "")
+            reason = agent_pr_info.get("reason", "Approved")
+            patch_lines.append(f"- **Authorization**: ✅ {reason}")
+            if branch_name and branch_url:
+                patch_lines.append(f"- **Fix Branch**: [`{branch_name}`]({branch_url})")
+            elif branch_name:
+                patch_lines.append(f"- **Fix Branch**: `{branch_name}`")
+            if pr_url:
+                label = f"Pull Request #{pr_number}" if pr_number else "Review Pull Request"
+                patch_lines.append(f"- **Pull Request for Review**: [**{label}**]({pr_url})")
+        else:
+            reason = agent_pr_info.get("reason", "Awaiting repository owner approval")
+            patch_lines.extend([
+                f"- **Status**: 🔒 {reason}",
+                "- **How to Approve Auto-Fix**: `@yurilo` can comment `/approve` (or `/fix`) on this issue or add the `agent-approved` label to automatically create a dedicated fix branch and Pull Request.",
+            ])
+
     return "\n".join(summary_lines + files_lines + commits_lines + rca_lines + patch_lines) + "\n"
 
 
@@ -957,6 +1054,25 @@ def is_already_triaged(comments: Optional[List[Dict[str, Any]]]) -> bool:
             if BOT_MARKER_1 in body or BOT_MARKER_2 in body:
                 return True
     return False
+
+
+def fetch_github_issue(repo: str, issue_number: int, token: str = "") -> Optional[Dict[str, Any]]:
+    """Fetch issue details from GitHub REST API."""
+    url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "TennisTracker-BugTriage/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        sys.stderr.write(f"Warning: Could not fetch issue #{issue_number} from GitHub ({e})\n")
+        return None
 
 
 def fetch_github_comments(repo: str, issue_number: int, token: str) -> List[Dict[str, Any]]:
@@ -1012,6 +1128,235 @@ def post_github_comment(repo: str, issue_number: int, comment_body: str, token: 
         return False
 
 
+def evaluate_agent_approval(
+    event: Optional[Dict[str, Any]] = None,
+    issue_author: str = "",
+    labels: Optional[List[str]] = None,
+    approved_by: str = "",
+    owner_login: str = "yurilo",
+) -> Tuple[bool, str, bool]:
+    """Evaluate whether an issue is authorized for automated branch & PR creation.
+
+    Returns (is_approved, reason, is_explicit_retrigger).
+    """
+    owner = owner_login.lower().strip()
+    author = (issue_author or "").lower().strip()
+    actor = (approved_by or "").lower().strip()
+    norm_labels = [str(l).lower().strip() for l in (labels or []) if l]
+
+    if event and isinstance(event, dict):
+        comment = event.get("comment")
+        if isinstance(comment, dict):
+            c_user = str((comment.get("user") or {}).get("login") or "").lower().strip()
+            c_body = str(comment.get("body") or "").lower()
+            if c_user == owner and any(cmd in c_body for cmd in ["/approve", "/fix", "/agent-fix"]):
+                return True, f"Approved via command comment by @{owner_login}", True
+
+        action = str(event.get("action") or "").lower()
+        lbl_name = str((event.get("label") or {}).get("name") or "").lower().strip()
+        if action == "labeled" and lbl_name in ("agent-approved", "auto-fix"):
+            return True, f"Approved via `{lbl_name}` label by @{owner_login}", True
+
+    if any(l in ("agent-approved", "auto-fix") for l in norm_labels):
+        return True, f"Approved via issue label (`agent-approved` / `auto-fix`)", False
+
+    if author == owner:
+        return True, f"Auto-approved (reported directly by repository owner @{owner_login})", False
+
+    if actor == owner and not event:
+        return True, f"Approved via manual dispatch by @{owner_login}", True
+
+    return False, f"Awaiting approval from @{owner_login}", False
+
+
+def slugify_branch_suffix(title: str, max_len: int = 36) -> str:
+    """Create a clean git branch slug from issue title."""
+    cleaned = re.sub(r"^\[[^\]]+\]\s*", "", title or "").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", cleaned).strip("-")
+    if not slug:
+        slug = "bugfix"
+    return slug[:max_len].strip("-")
+
+
+def create_or_find_pull_request(
+    repo: str,
+    branch_name: str,
+    base_branch: str,
+    title: str,
+    body: str,
+    token: str,
+) -> Optional[Dict[str, Any]]:
+    """Create a Pull Request on GitHub or return an existing open PR for branch_name."""
+    if not token:
+        return None
+    owner = repo.split("/")[0]
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "TennisTracker-BugTriage/1.0",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    url = f"https://api.github.com/repos/{repo}/pulls"
+    payload = json.dumps({
+        "title": title,
+        "head": branch_name,
+        "base": base_branch,
+        "body": body,
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 422:
+            # PR may already exist; query open PRs for this head branch
+            list_url = f"https://api.github.com/repos/{repo}/pulls?head={owner}:{branch_name}&state=open"
+            list_req = urllib.request.Request(list_url, headers=headers, method="GET")
+            try:
+                with urllib.request.urlopen(list_req, timeout=10) as resp2:
+                    prs = json.loads(resp2.read().decode("utf-8"))
+                    if isinstance(prs, list) and prs:
+                        return prs[0]
+            except Exception:
+                pass
+        sys.stderr.write(f"Warning: Could not create PR for {branch_name} ({e})\n")
+        return None
+    except Exception as e:
+        sys.stderr.write(f"Warning: Could not create PR for {branch_name} ({e})\n")
+        return None
+
+
+def create_fix_branch_and_pr(
+    repo: str,
+    issue_number: int,
+    issue_title: str,
+    category: str,
+    issue_body: str,
+    report_markdown: str,
+    token: str,
+    repo_root: Optional[str] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Create a dedicated fix/feature branch, commit candidate patch & triage report, push, and open a PR."""
+    if not repo_root:
+        repo_root = os.getcwd()
+    prefix = "feat" if category == "FEATURE" else "fix"
+    slug = slugify_branch_suffix(issue_title)
+    branch_name = f"{prefix}/issue-{issue_number}-{slug}"
+    branch_url = f"https://github.com/{repo}/tree/{branch_name}"
+
+    if dry_run:
+        return {
+            "branch_name": branch_name,
+            "branch_url": branch_url,
+            "pr_url": f"https://github.com/{repo}/pull/dry-run",
+            "pr_number": "DRY-RUN",
+        }
+
+    # Check if branch already exists on remote and has an open PR
+    existing_pr = create_or_find_pull_request(
+        repo=repo,
+        branch_name=branch_name,
+        base_branch="main",
+        title=f"fix(issue-#{issue_number}): {re.sub(r'^\\[[^\\]]+\\]\\s*', '', issue_title or f'Resolve issue #{issue_number}')}",
+        body=f"Automated agentic fix branch for #{issue_number}.\n\nCloses #{issue_number}",
+        token=token,
+    )
+    if existing_pr and existing_pr.get("html_url"):
+        return {
+            "branch_name": branch_name,
+            "branch_url": branch_url,
+            "pr_url": existing_pr.get("html_url", ""),
+            "pr_number": existing_pr.get("number", ""),
+        }
+
+    # Otherwise create the branch locally in GitHub Actions / git repo, commit candidate patch artifact, push, and open PR
+    try:
+        cur_branch_proc = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        orig_branch = cur_branch_proc.stdout.strip() or "main"
+
+        subprocess.run(["git", "checkout", "-B", branch_name], cwd=repo_root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        patches_dir = os.path.join(repo_root, ".patches")
+        os.makedirs(patches_dir, exist_ok=True)
+        patch_block = get_deterministic_candidate_patch(category, user_text=issue_body)
+        raw_diff = patch_block.replace("```diff", "").replace("```", "").strip() + "\n"
+        patch_file = os.path.join(patches_dir, f"issue-{issue_number}.patch")
+        with open(patch_file, "w", encoding="utf-8") as pf:
+            pf.write(raw_diff)
+
+        triage_file = os.path.join(patches_dir, f"issue-{issue_number}-triage.md")
+        with open(triage_file, "w", encoding="utf-8") as tf:
+            tf.write(report_markdown)
+
+        # Apply patch if it applies cleanly to current tree
+        apply_check = subprocess.run(
+            ["git", "apply", "--check", patch_file],
+            cwd=repo_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if apply_check.returncode == 0:
+            subprocess.run(["git", "apply", patch_file], cwd=repo_root, check=False)
+
+        subprocess.run(["git", "add", ".patches/"], cwd=repo_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"fix(issue-#{issue_number}): add candidate patch and triage analysis for #{issue_number}"],
+            cwd=repo_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            ["git", "push", "-u", "origin", branch_name, "--force"],
+            cwd=repo_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(["git", "checkout", orig_branch], cwd=repo_root, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        clean_title = re.sub(r"^\[[^\]]+\]\s*", "", issue_title or f"Resolve issue #{issue_number}")
+        pr_body = (
+            f"## 🤖 Agentic Bug-Fix Pull Request for #{issue_number}\n\n"
+            f"Closes #{issue_number}\n\n"
+            f"---\n\n"
+            f"{report_markdown}"
+        )
+        pr_obj = create_or_find_pull_request(
+            repo=repo,
+            branch_name=branch_name,
+            base_branch="main",
+            title=f"fix(issue-#{issue_number}): {clean_title}",
+            body=pr_body,
+            token=token,
+        )
+        return {
+            "branch_name": branch_name,
+            "branch_url": branch_url,
+            "pr_url": (pr_obj or {}).get("html_url", ""),
+            "pr_number": (pr_obj or {}).get("number", ""),
+        }
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to create/push fix branch {branch_name}: {e}\n")
+        return {
+            "branch_name": branch_name,
+            "branch_url": branch_url,
+            "pr_url": "",
+            "pr_number": "",
+        }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point for triage script."""
     parser = argparse.ArgumentParser(description="Tennis Tracker Automated Bug Triage Engine")
@@ -1025,24 +1370,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Run triage and generate report without posting comment")
     parser.add_argument("--no-llm", action="store_true", help="Disable LLM analysis and enforce deterministic static mode")
     parser.add_argument("--llm-provider", choices=["auto", "gemini", "openai", "none"], default="auto", help="LLM provider")
+    parser.add_argument("--auto-branch-pr", action="store_true", help="Create fix branch and PR when approved or authored by owner")
+    parser.add_argument("--approved-by", default="", help="GitHub actor login triggering the workflow")
+    parser.add_argument("--branch-name", default="", help="Optional pre-created branch name to link in comment")
+    parser.add_argument("--pr-url", default="", help="Optional pre-created Pull Request URL to link in comment")
+    parser.add_argument("--pr-number", default="", help="Optional pre-created Pull Request number to link in comment")
 
     args = parser.parse_args(argv)
 
     issue_body: Optional[str] = None
     issue_number: Optional[int] = args.issue_number
     issue_title: str = ""
+    issue_author: str = ""
     labels: List[str] = []
+    event_data: Optional[Dict[str, Any]] = None
 
     # 1. Parse GitHub event payload if provided
     if args.issue_event:
         try:
             with open(args.issue_event, "r", encoding="utf-8") as f:
-                event = json.load(f)
-            issue = event.get("issue", {})
+                event_data = json.load(f)
+            issue = event_data.get("issue", {})
             issue_body = issue.get("body", "")
             if issue_number is None:
                 issue_number = issue.get("number")
             issue_title = issue.get("title", "")
+            issue_author = str((issue.get("user") or {}).get("login") or "")
             raw_labels = issue.get("labels", [])
             labels = [l.get("name") if isinstance(l, dict) else str(l) for l in raw_labels]
         except Exception as e:
@@ -1057,13 +1410,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
     elif args.issue_body is not None:
         issue_body = args.issue_body
+    elif issue_number is not None:
+        fetched = fetch_github_issue(args.repo, issue_number, args.token)
+        if fetched and isinstance(fetched, dict):
+            issue_body = fetched.get("body") or ""
+            issue_title = fetched.get("title") or ""
+            issue_author = str((fetched.get("user") or {}).get("login") or "")
+            raw_labels = fetched.get("labels", [])
+            labels = [l.get("name") if isinstance(l, dict) else str(l) for l in raw_labels]
 
     if issue_body is None:
-        sys.stderr.write("Error: Must provide one of --issue-event, --issue-file, or --issue-body.\n")
+        sys.stderr.write("Error: Must provide one of --issue-event, --issue-file, --issue-body, or --issue-number.\n")
         return 2
 
-    # 2. Idempotency Check
-    if not args.dry_run and issue_number and args.token:
+    is_approved, approval_reason, is_explicit_retrigger = evaluate_agent_approval(
+        event=event_data,
+        issue_author=issue_author,
+        labels=labels,
+        approved_by=args.approved_by,
+    )
+
+    # 2. Idempotency Check (skip only if already triaged AND not an explicit approval retrigger)
+    if not args.dry_run and issue_number and args.token and not is_explicit_retrigger and not args.pr_url:
         existing_comments = fetch_github_comments(args.repo, issue_number, args.token)
         if is_already_triaged(existing_comments):
             msg = f"[IDEMPOTENCY] Issue #{issue_number} already contains automated triage comment. Skipping.\n"
@@ -1078,7 +1446,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     category = extract_category(issue_body=issue_body, labels=labels)
 
     # 4. Correlate Source Files
-    suspected_files = correlate_source_files(category, snapshot, user_text=issue_body)
+    suspected_files = correlate_source_files(category, snapshot, user_text=f"{issue_title}\n{issue_body}")
 
     # 5. Correlate Git History
     repo_root = os.getcwd()
@@ -1101,7 +1469,51 @@ def main(argv: Optional[List[str]] = None) -> int:
             provider=args.llm_provider,
         )
 
-    # 7. Generate Full Report
+    # 7. Optional Agentic Branch & PR Creation
+    agent_pr_info: Optional[Dict[str, Any]] = None
+    if args.branch_name or args.pr_url:
+        b_name = args.branch_name
+        agent_pr_info = {
+            "approved": True,
+            "reason": approval_reason,
+            "branch_name": b_name,
+            "branch_url": f"https://github.com/{args.repo}/tree/{b_name}" if b_name else "",
+            "pr_url": args.pr_url,
+            "pr_number": args.pr_number,
+        }
+    elif args.auto_branch_pr and issue_number:
+        if is_approved:
+            prelim_report = generate_triage_comment(
+                issue_body=issue_body,
+                snapshot=snapshot,
+                category=category,
+                suspected_files=suspected_files,
+                related_commits=related_commits,
+                llm_result=llm_result,
+            )
+            pr_result = create_fix_branch_and_pr(
+                repo=args.repo,
+                issue_number=issue_number,
+                issue_title=issue_title,
+                category=category,
+                issue_body=f"{issue_title}\n{issue_body}",
+                report_markdown=prelim_report,
+                token=args.token,
+                repo_root=repo_root,
+                dry_run=args.dry_run,
+            )
+            agent_pr_info = {
+                "approved": True,
+                "reason": approval_reason,
+                **pr_result,
+            }
+        else:
+            agent_pr_info = {
+                "approved": False,
+                "reason": approval_reason,
+            }
+
+    # 8. Generate Full Report
     report = generate_triage_comment(
         issue_body=issue_body,
         snapshot=snapshot,
@@ -1109,9 +1521,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         suspected_files=suspected_files,
         related_commits=related_commits,
         llm_result=llm_result,
+        agent_pr_info=agent_pr_info,
     )
 
-    # 8. Output handling
+    # 9. Output handling
     if args.output:
         try:
             with open(args.output, "w", encoding="utf-8") as f:
@@ -1132,3 +1545,4 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
