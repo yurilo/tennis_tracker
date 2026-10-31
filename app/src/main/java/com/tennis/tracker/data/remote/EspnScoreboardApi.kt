@@ -164,9 +164,12 @@ open class EspnScoreboardApi(
                             else -> null
                         }
 
-                        val isMatchInTiebreak = matchState == MatchState.LIVE && competitors.any {
-                            it.tiebreakScores.lastOrNull() != null
-                        }
+                        val p1LastGames = p1.setScores.lastOrNull()
+                        val p2LastGames = p2.setScores.lastOrNull()
+                        val isMatchInTiebreak = matchState == MatchState.LIVE && (
+                            competitors.any { it.tiebreakScores.lastOrNull() != null } ||
+                            (p1LastGames != null && p2LastGames != null && p1LastGames >= 6 && p2LastGames >= 6 && p1LastGames == p2LastGames)
+                        )
 
                         val statusDetail = when {
                             isMatchInTiebreak && !statusDetailStr.contains("Tiebreak", ignoreCase = true) ->
@@ -279,7 +282,12 @@ open class EspnScoreboardApi(
             val tiebreakScores = mutableListOf<Int?>()
             linescores?.forEachJsonObject { ls ->
                 val value = ls.optDouble("value", 0.0).toInt()
-                val tiebreak = if (ls.has("tiebreak")) ls.optInt("tiebreak") else null
+                val tiebreak = when {
+                    ls.has("tiebreak") && !ls.isNull("tiebreak") -> ls.optInt("tiebreak")
+                    ls.has("tieBreak") && !ls.isNull("tieBreak") -> ls.optInt("tieBreak")
+                    ls.has("tiebreakScore") && !ls.isNull("tiebreakScore") -> ls.optInt("tiebreakScore")
+                    else -> null
+                }
                 setScores.add(value)
                 tiebreakScores.add(tiebreak)
             }
@@ -291,7 +299,7 @@ open class EspnScoreboardApi(
                 compObj.has("gameScore") -> compObj.optString("gameScore")
                 compObj.has("score") -> compObj.optString("score")
                 else -> null
-            }?.trim()
+            }?.trim()?.takeIf { it.isNotEmpty() }
 
             val isValidTennisPoint = rawCandidate != null && (
                 rawCandidate in VALID_TENNIS_POINTS ||
@@ -307,9 +315,6 @@ open class EspnScoreboardApi(
                 }
             } else when {
                 matchState == MatchState.LIVE && lastSetTiebreak != null -> "TB $lastSetTiebreak"
-                matchState == MatchState.LIVE && setScores.isNotEmpty() && setScores.last() >= 6 -> {
-                    lastSetTiebreak?.let { "TB $it" } ?: if (rawServing) "40" else "30"
-                }
                 matchState == MatchState.LIVE -> if (rawServing) "40" else "30"
                 else -> null
             }
@@ -414,17 +419,37 @@ open class EspnScoreboardApi(
             val p1Serving = p1.isServing
             val p2Serving = p2.isServing
 
+            val lastIdx1 = p1.setScores.size - 1
+            val lastIdx2 = p2.setScores.size - 1
+            val p1LastSet = p1.setScores.lastOrNull()
+            val p2LastSet = p2.setScores.lastOrNull()
+            val isSixAllTiebreak = p1LastSet != null && p2LastSet != null &&
+                p1LastSet >= 6 && p2LastSet >= 6 && p1LastSet == p2LastSet
+
+            var tb1 = if (lastIdx1 >= 0) p1.tiebreakScores.getOrNull(lastIdx1) else null
+            var tb2 = if (lastIdx2 >= 0) p2.tiebreakScores.getOrNull(lastIdx2) else null
+
+            // If at 6-6 and raw gameScore is a numeric tiebreak point (e.g. "2" and "2"), promote to tiebreakScores
+            if (isSixAllTiebreak || tb1 != null || tb2 != null) {
+                val p1RawNum = p1.currentGameScore?.removePrefix("TB")?.trim()?.toIntOrNull()
+                val p2RawNum = p2.currentGameScore?.removePrefix("TB")?.trim()?.toIntOrNull()
+                val p1IsSyntheticPoint = p1.currentGameScore in setOf("15", "30", "40", "Adv")
+                val p2IsSyntheticPoint = p2.currentGameScore in setOf("15", "30", "40", "Adv")
+                if (tb1 == null && p1RawNum != null && !p1IsSyntheticPoint) {
+                    tb1 = p1RawNum
+                }
+                if (tb2 == null && p2RawNum != null && !p2IsSyntheticPoint) {
+                    tb2 = p2RawNum
+                }
+            }
+
+            val isCurrentSetTiebreak = isSixAllTiebreak || tb1 != null || tb2 != null
+
             val (finalP1Serving, finalP2Serving) = when {
                 p1Serving && !p2Serving -> true to false
                 !p1Serving && p2Serving -> false to true
                 p1Serving && p2Serving -> true to false // Disambiguate if both flagged
                 else -> {
-                    // If neither flagged, check if in an active tiebreak with known points
-                    val lastIdx1 = p1.setScores.size - 1
-                    val tb1 = if (lastIdx1 >= 0) p1.tiebreakScores.getOrNull(lastIdx1) else null
-                    val lastIdx2 = p2.setScores.size - 1
-                    val tb2 = if (lastIdx2 >= 0) p2.tiebreakScores.getOrNull(lastIdx2) else null
-
                     if (tb1 != null || tb2 != null) {
                         // In Tiebreak: Server changes after point 1, then every 2 points.
                         // Completed points = tb1 + tb2.
@@ -434,15 +459,47 @@ open class EspnScoreboardApi(
                     } else {
                         // Standard tennis service rotation fallback:
                         // Total games played in current set alternates server (Game 0: P1, Game 1: P2, etc.)
-                        val gamesInSet = (p1.setScores.lastOrNull() ?: 0) + (p2.setScores.lastOrNull() ?: 0)
+                        val gamesInSet = (p1LastSet ?: 0) + (p2LastSet ?: 0)
                         if (gamesInSet % 2 == 0) true to false else false to true
                     }
                 }
             }
 
+            val updatedP1Tiebreaks = if (lastIdx1 >= 0 && tb1 != null && p1.tiebreakScores.getOrNull(lastIdx1) == null) {
+                p1.tiebreakScores.toMutableList().apply { this[lastIdx1] = tb1 }
+            } else p1.tiebreakScores
+
+            val updatedP2Tiebreaks = if (lastIdx2 >= 0 && tb2 != null && p2.tiebreakScores.getOrNull(lastIdx2) == null) {
+                p2.tiebreakScores.toMutableList().apply { this[lastIdx2] = tb2 }
+            } else p2.tiebreakScores
+
+            val resolvedP1Game = when {
+                isCurrentSetTiebreak && (tb1 != null || tb2 != null) -> "TB ${tb1 ?: 0}"
+                isCurrentSetTiebreak -> "TB"
+                !p1Serving && !p2Serving && p1.currentGameScore == "30" && p2.currentGameScore == "30" ->
+                    if (finalP1Serving) "40" else "30"
+                else -> p1.currentGameScore
+            }
+
+            val resolvedP2Game = when {
+                isCurrentSetTiebreak && (tb1 != null || tb2 != null) -> "TB ${tb2 ?: 0}"
+                isCurrentSetTiebreak -> "TB"
+                !p1Serving && !p2Serving && p1.currentGameScore == "30" && p2.currentGameScore == "30" ->
+                    if (finalP2Serving) "40" else "30"
+                else -> p2.currentGameScore
+            }
+
             return listOf(
-                p1.copy(isServing = finalP1Serving),
-                p2.copy(isServing = finalP2Serving)
+                p1.copy(
+                    isServing = finalP1Serving,
+                    tiebreakScores = updatedP1Tiebreaks,
+                    currentGameScore = resolvedP1Game
+                ),
+                p2.copy(
+                    isServing = finalP2Serving,
+                    tiebreakScores = updatedP2Tiebreaks,
+                    currentGameScore = resolvedP2Game
+                )
             ) + list.drop(2)
         }
 

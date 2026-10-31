@@ -139,10 +139,45 @@ class ScoreboardRepositoryImpl(
                 scopedMatches.map { match ->
                     val pair = liveScores[match.id]
                     if (pair != null) {
-                        match.copy(
-                            player1 = match.player1.copy(currentGameScore = pair.first),
-                            player2 = match.player2.copy(currentGameScore = pair.second)
-                        )
+                        val p1Set = match.player1.setScores.lastOrNull()
+                        val p2Set = match.player2.setScores.lastOrNull()
+                        val isSixAllTiebreak = match.state == MatchState.LIVE &&
+                            p1Set != null && p2Set != null &&
+                            p1Set >= 6 && p2Set >= 6 && p1Set == p2Set
+                        if (isSixAllTiebreak) {
+                            val standardPoints = setOf("15", "30", "40", "Adv", "A", "Ad", "Deuce")
+                            val raw1 = pair.first.removePrefix("TB").trim()
+                            val raw2 = pair.second.removePrefix("TB").trim()
+                            val tb1 = raw1.takeIf { it !in standardPoints }?.toIntOrNull()
+                                ?: match.player1.tiebreakScores.lastOrNull()
+                            val tb2 = raw2.takeIf { it !in standardPoints }?.toIntOrNull()
+                                ?: match.player2.tiebreakScores.lastOrNull()
+                            val lastIdx1 = match.player1.setScores.size - 1
+                            val lastIdx2 = match.player2.setScores.size - 1
+                            val newTbList1 = if (lastIdx1 >= 0 && tb1 != null) {
+                                match.player1.tiebreakScores.toMutableList().apply {
+                                    while (size <= lastIdx1) add(null)
+                                    this[lastIdx1] = tb1
+                                }
+                            } else match.player1.tiebreakScores
+                            val newTbList2 = if (lastIdx2 >= 0 && tb2 != null) {
+                                match.player2.tiebreakScores.toMutableList().apply {
+                                    while (size <= lastIdx2) add(null)
+                                    this[lastIdx2] = tb2
+                                }
+                            } else match.player2.tiebreakScores
+                            val game1 = if (tb1 != null || tb2 != null) "TB ${tb1 ?: 0}" else "TB"
+                            val game2 = if (tb1 != null || tb2 != null) "TB ${tb2 ?: 0}" else "TB"
+                            match.copy(
+                                player1 = match.player1.copy(currentGameScore = game1, tiebreakScores = newTbList1),
+                                player2 = match.player2.copy(currentGameScore = game2, tiebreakScores = newTbList2)
+                            )
+                        } else {
+                            match.copy(
+                                player1 = match.player1.copy(currentGameScore = pair.first),
+                                player2 = match.player2.copy(currentGameScore = pair.second)
+                            )
+                        }
                     } else match
                 }
             } else scopedMatches
