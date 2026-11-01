@@ -46,7 +46,11 @@ jobs:
         github.event.comment.user.login == 'yurilo' && (
           contains(github.event.comment.body, '/approve') ||
           contains(github.event.comment.body, '/fix') ||
-          contains(github.event.comment.body, '/agent-fix')
+          contains(github.event.comment.body, '/agent-fix') ||
+          contains(github.event.comment.body, '/merge') ||
+          contains(github.event.comment.body, 'merge it') ||
+          contains(github.event.comment.body, 'ship it') ||
+          contains(github.event.comment.body, 'lgtm')
         ))
     steps:
       - name: Checkout repository

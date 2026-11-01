@@ -1357,6 +1357,108 @@ def create_fix_branch_and_pr(
         }
 
 
+def is_merge_requested(
+    event: Optional[Dict[str, Any]] = None,
+    comments: Optional[List[Dict[str, Any]]] = None,
+    owner_login: str = "yurilo",
+    explicit_merge: bool = False,
+) -> bool:
+    """Check if repository owner requested merging the issue's PR via comment or flag."""
+    if explicit_merge:
+        return True
+    owner = owner_login.lower().strip()
+    merge_phrases = ("/merge", "merge it", "merge pr", "ship it", "lgtm")
+
+    if event and isinstance(event, dict):
+        comment = event.get("comment")
+        if isinstance(comment, dict):
+            c_user = str((comment.get("user") or {}).get("login") or "").lower().strip()
+            c_body = str(comment.get("body") or "").lower().strip()
+            if c_user == owner and any(p in c_body for p in merge_phrases):
+                return True
+
+    if comments and isinstance(comments, list):
+        for c in reversed(comments):
+            if isinstance(c, dict):
+                c_user = str((c.get("user") or {}).get("login") or "").lower().strip()
+                c_body = str(c.get("body") or "").lower().strip()
+                if BOT_MARKER_1 in c_body or BOT_MARKER_2 in c_body:
+                    continue
+                if c_user == owner and any(p in c_body for p in merge_phrases):
+                    return True
+    return False
+
+
+def merge_issue_pull_request(
+    repo: str,
+    issue_number: int,
+    token: str,
+    comments: Optional[List[Dict[str, Any]]] = None,
+    dry_run: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Find the open PR associated with issue_number and merge it via GitHub REST API."""
+    if not token:
+        return None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "TennisTracker-BugTriage/1.0",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    pr_number: Optional[int] = None
+    # 1. Check bot triage comment for PR number
+    if comments:
+        for c in reversed(comments):
+            body = str((c or {}).get("body") or "")
+            m = re.search(r"/pull/(\d+)", body)
+            if m:
+                pr_number = int(m.group(1))
+                break
+
+    # 2. Search open PRs referencing issue-#<number> in branch name or body
+    if pr_number is None:
+        list_url = f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=30"
+        req = urllib.request.Request(list_url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                prs = json.loads(resp.read().decode("utf-8"))
+                for pr in prs:
+                    head_ref = str(((pr.get("head") or {}).get("ref")) or "")
+                    pr_body = str(pr.get("body") or "")
+                    if f"issue-{issue_number}-" in head_ref or f"#{issue_number}" in pr_body:
+                        pr_number = int(pr["number"])
+                        break
+        except Exception as e:
+            sys.stderr.write(f"Warning: Could not list open PRs ({e})\n")
+
+    if pr_number is None:
+        return None
+
+    if dry_run:
+        return {"pr_number": pr_number, "merged": True, "sha": "dry-run-sha"}
+
+    merge_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/merge"
+    payload = json.dumps({
+        "commit_title": f"Merge pull request #{pr_number} (Fixes #{issue_number})",
+        "merge_method": "merge",
+    }).encode("utf-8")
+    merge_req = urllib.request.Request(merge_url, data=payload, headers=headers, method="PUT")
+    try:
+        with urllib.request.urlopen(merge_req, timeout=15) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+            return {
+                "pr_number": pr_number,
+                "merged": bool(res.get("merged", True)),
+                "sha": res.get("sha", ""),
+                "message": res.get("message", "Pull Request successfully merged"),
+            }
+    except Exception as e:
+        sys.stderr.write(f"Error merging PR #{pr_number}: {e}\n")
+        return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point for triage script."""
     parser = argparse.ArgumentParser(description="Tennis Tracker Automated Bug Triage Engine")
@@ -1371,6 +1473,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--no-llm", action="store_true", help="Disable LLM analysis and enforce deterministic static mode")
     parser.add_argument("--llm-provider", choices=["auto", "gemini", "openai", "none"], default="auto", help="LLM provider")
     parser.add_argument("--auto-branch-pr", action="store_true", help="Create fix branch and PR when approved or authored by owner")
+    parser.add_argument("--merge-pr", action="store_true", help="Merge the open PR associated with this issue")
     parser.add_argument("--approved-by", default="", help="GitHub actor login triggering the workflow")
     parser.add_argument("--branch-name", default="", help="Optional pre-created branch name to link in comment")
     parser.add_argument("--pr-url", default="", help="Optional pre-created Pull Request URL to link in comment")
@@ -1423,6 +1526,33 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stderr.write("Error: Must provide one of --issue-event, --issue-file, --issue-body, or --issue-number.\n")
         return 2
 
+    existing_comments: List[Dict[str, Any]] = []
+    if issue_number and args.token:
+        existing_comments = fetch_github_comments(args.repo, issue_number, args.token)
+
+    # Check if owner requested merging the PR (e.g. commented "merge it" or "/merge")
+    if issue_number and args.token and is_merge_requested(event=event_data, comments=existing_comments, explicit_merge=args.merge_pr):
+        merge_res = merge_issue_pull_request(
+            repo=args.repo,
+            issue_number=issue_number,
+            token=args.token,
+            comments=existing_comments,
+            dry_run=args.dry_run,
+        )
+        if merge_res and merge_res.get("merged"):
+            pr_num = merge_res.get("pr_number")
+            sha = merge_res.get("sha", "")[:7]
+            merge_comment = (
+                f"✅ **Agentic Auto-Merge Complete**: Merged [**Pull Request #{pr_num}**](https://github.com/{args.repo}/pull/{pr_num}) "
+                f"into `main` (`{sha}`) per `@yurilo`'s comment on #{issue_number}."
+            )
+            post_github_comment(args.repo, issue_number, merge_comment, args.token, dry_run=args.dry_run)
+            if args.output:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(merge_comment + "\n")
+            print(merge_comment)
+            return 0
+
     is_approved, approval_reason, is_explicit_retrigger = evaluate_agent_approval(
         event=event_data,
         issue_author=issue_author,
@@ -1432,7 +1562,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 2. Idempotency Check (skip only if already triaged AND not an explicit approval retrigger)
     if not args.dry_run and issue_number and args.token and not is_explicit_retrigger and not args.pr_url:
-        existing_comments = fetch_github_comments(args.repo, issue_number, args.token)
         if is_already_triaged(existing_comments):
             msg = f"[IDEMPOTENCY] Issue #{issue_number} already contains automated triage comment. Skipping.\n"
             sys.stdout.write(msg)
@@ -1545,4 +1674,5 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
