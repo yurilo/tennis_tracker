@@ -222,4 +222,100 @@ class GameScoreTest {
         assertNull(matches[1].player1.currentGameScore)
         assertNull(matches[1].player2.currentGameScore)
     }
+
+    @Test
+    fun testIssue10_liveTiebreakAt6AllWith2To2PointsShowsTiebreakNot30All() {
+        val json = """
+        {
+          "events": [
+            {
+              "name": "Paris Masters",
+              "groupings": [
+                {
+                  "grouping": { "displayName": "Men's Singles" },
+                  "competitions": [
+                    {
+                      "id": "182600",
+                      "status": {
+                        "type": { "state": "in", "completed": false, "description": "In Progress" }
+                      },
+                      "competitors": [
+                        {
+                          "id": "p1",
+                          "athlete": { "displayName": "Taylor Fritz" },
+                          "points": "2",
+                          "linescores": [{ "value": 6.0 }]
+                        },
+                        {
+                          "id": "p2",
+                          "athlete": { "displayName": "Holger Rune" },
+                          "points": "2",
+                          "linescores": [{ "value": 6.0 }]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val matches = parser.parseScoreboardJson(json)
+        assertEquals(1, matches.size)
+        val match = matches[0]
+
+        assertEquals("TB 2", match.player1.currentGameScore)
+        assertEquals("TB 2", match.player2.currentGameScore)
+        assertEquals(Integer.valueOf(2), match.player1.tiebreakScores.lastOrNull())
+        assertEquals(Integer.valueOf(2), match.player2.tiebreakScores.lastOrNull())
+        assertTrue(match.statusDetail.contains("Tiebreak", ignoreCase = true))
+    }
+
+    @Test
+    fun testIssue10_liveTiebreakAt6AllWithoutExplicitPointsNeverShows30All() {
+        val json = """
+        {
+          "events": [
+            {
+              "name": "Paris Masters",
+              "groupings": [
+                {
+                  "grouping": { "displayName": "Men's Singles" },
+                  "competitions": [
+                    {
+                      "id": "182601",
+                      "status": {
+                        "type": { "state": "in", "completed": false, "description": "In Progress" }
+                      },
+                      "competitors": [
+                        {
+                          "id": "p1",
+                          "athlete": { "displayName": "Taylor Fritz" },
+                          "linescores": [{ "value": 6.0 }]
+                        },
+                        {
+                          "id": "p2",
+                          "athlete": { "displayName": "Holger Rune" },
+                          "linescores": [{ "value": 6.0 }]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """.trimIndent()
+
+        val matches = parser.parseScoreboardJson(json)
+        assertEquals(1, matches.size)
+        val match = matches[0]
+
+        assertEquals("TB", match.player1.currentGameScore)
+        assertEquals("TB", match.player2.currentGameScore)
+        assertTrue(match.statusDetail.contains("Tiebreak", ignoreCase = true))
+    }
 }

@@ -627,28 +627,33 @@ private fun CompetitorRow(
             }
 
             // Current Game score if live (e.g. 40, Adv, or tiebreak points like TB 6, TB 2)
+            val lastIdx = competitor.setScores.size - 1
+            val mySet = if (lastIdx >= 0) competitor.setScores[lastIdx] else 0
+            val oppSet = if (lastIdx >= 0) opponent.setScores.getOrNull(lastIdx) ?: 0 else 0
+            val myTb = if (lastIdx >= 0) competitor.tiebreakScores.getOrNull(lastIdx) else null
+            val oppTb = if (lastIdx >= 0) opponent.tiebreakScores.getOrNull(lastIdx) else null
+            val isSixAllTiebreak = isLive && lastIdx >= 0 && (
+                (mySet >= 6 && oppSet >= 6 && mySet == oppSet) || myTb != null || oppTb != null
+            )
+
             val displayGameScore = when {
                 !isLive -> null
+                isSixAllTiebreak -> {
+                    val raw = competitor.currentGameScore?.trim()
+                    val standardPoints = setOf("15", "30", "40", "Adv", "ADV", "A", "Ad", "AD", "Deuce", "DEUCE")
+                    when {
+                        raw != null && raw.startsWith("TB", ignoreCase = true) -> raw
+                        myTb != null || oppTb != null -> "TB ${myTb ?: 0}"
+                        raw != null && raw !in standardPoints && raw.all { it.isDigit() } -> "TB $raw"
+                        else -> "TB"
+                    }
+                }
                 competitor.currentGameScore != null && isValidTennisScore(competitor.currentGameScore) -> {
                     val raw = competitor.currentGameScore.trim()
                     when {
                         raw.equals("A", ignoreCase = true) || raw.equals("Ad", ignoreCase = true) -> "Adv"
                         raw.equals("Deuce", ignoreCase = true) -> "40"
                         else -> raw
-                    }
-                }
-                competitor.setScores.isNotEmpty() -> {
-                    val lastIdx = competitor.setScores.size - 1
-                    val myTb = competitor.tiebreakScores.getOrNull(lastIdx)
-                    val oppTb = opponent.tiebreakScores.getOrNull(lastIdx)
-                    val mySet = competitor.setScores[lastIdx]
-                    val oppSet = opponent.setScores.getOrNull(lastIdx) ?: 0
-                    if (myTb != null || oppTb != null || (mySet >= 6 && oppSet >= 6)) {
-                        "TB ${myTb ?: 0}"
-                    } else if (competitor.isServing) {
-                        "40"
-                    } else {
-                        "30"
                     }
                 }
                 else -> if (competitor.isServing) "40" else "30"

@@ -250,26 +250,32 @@ class FollowedMatchesRemoteViewsFactory(
 
     private fun getGameScore(competitor: Competitor, opponent: Competitor, isLive: Boolean): String? {
         if (!isLive) return null
+        val lastIdx = competitor.setScores.size - 1
+        val mySet = if (lastIdx >= 0) competitor.setScores[lastIdx] else 0
+        val oppSet = if (lastIdx >= 0) opponent.setScores.getOrNull(lastIdx) ?: 0 else 0
+        val myTb = if (lastIdx >= 0) competitor.tiebreakScores.getOrNull(lastIdx) else null
+        val oppTb = if (lastIdx >= 0) opponent.tiebreakScores.getOrNull(lastIdx) else null
+        val isSixAllTiebreak = lastIdx >= 0 && (
+            (mySet >= 6 && oppSet >= 6 && mySet == oppSet) || myTb != null || oppTb != null
+        )
+
+        if (isSixAllTiebreak) {
+            val raw = competitor.currentGameScore?.trim()
+            val standardPoints = setOf("15", "30", "40", "Adv", "ADV", "A", "Ad", "AD", "Deuce", "DEUCE")
+            return when {
+                !raw.isNullOrEmpty() && raw.startsWith("TB", ignoreCase = true) -> raw
+                myTb != null || oppTb != null -> "TB ${myTb ?: 0}"
+                !raw.isNullOrEmpty() && raw !in standardPoints && raw.all { it.isDigit() } -> "TB $raw"
+                else -> "TB"
+            }
+        }
+
         if (!competitor.currentGameScore.isNullOrBlank()) {
             val raw = competitor.currentGameScore.trim()
             return when {
                 raw.equals("A", ignoreCase = true) || raw.equals("Ad", ignoreCase = true) -> "Adv"
                 raw.equals("Deuce", ignoreCase = true) -> "40"
                 else -> raw
-            }
-        }
-        if (competitor.setScores.isNotEmpty()) {
-            val lastIdx = competitor.setScores.size - 1
-            val myTb = competitor.tiebreakScores.getOrNull(lastIdx)
-            val oppTb = opponent.tiebreakScores.getOrNull(lastIdx)
-            val mySet = competitor.setScores[lastIdx]
-            val oppSet = opponent.setScores.getOrNull(lastIdx) ?: 0
-            if (myTb != null || oppTb != null || (mySet >= 6 && oppSet >= 6)) {
-                return "TB ${myTb ?: 0}"
-            } else if (competitor.isServing) {
-                return "40"
-            } else {
-                return "30"
             }
         }
         return if (competitor.isServing) "40" else "30"
