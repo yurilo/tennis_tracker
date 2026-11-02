@@ -110,34 +110,21 @@ class ScoreboardRepositoryTest {
     }
 
     @Test
-    fun `getMatchStatistics should return valid statistics for finished match when remote api fails`() = runBlocking {
+    fun `getMatchStatistics should fail gracefully for finished match when remote api fails without returning hardcoded stats`() = runBlocking {
         val repository = createRepository()
         val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
         val result = repository.getMatchStatistics(finishedMatch)
 
-        assertTrue("Result should succeed with fallback statistics", result.isSuccess)
-        val stats = result.getOrNull()
-        assertNotNull(stats)
-        assertEquals(finishedMatch.id, stats!!.matchId)
-        assertTrue("Must contain periods including Match", stats.periods.isNotEmpty())
-        val matchPeriod = stats.periods.firstOrNull { it.period == "ALL" }
-        assertNotNull(matchPeriod)
-        assertTrue("Must contain Service group", matchPeriod!!.groups.any { it.groupName == "Service" })
-        assertTrue("Must contain Winners group", matchPeriod.groups.any { it.groupName == "Winners" })
-        assertTrue("Must contain Points group", matchPeriod.groups.any { it.groupName == "Points" })
+        assertTrue("Result must fail when remote stats are unavailable instead of returning fake hardcoded stats", result.isFailure)
     }
 
     @Test
-    fun `getMatchStatistics should return valid statistics for live match when remote api fails`() = runBlocking {
+    fun `getMatchStatistics should fail gracefully for live match when remote api fails without returning hardcoded stats`() = runBlocking {
         val repository = createRepository()
         val liveMatch = MockTournamentData.matches.first { it.state == MatchState.LIVE }
         val result = repository.getMatchStatistics(liveMatch)
 
-        assertTrue("Result should succeed with fallback statistics", result.isSuccess)
-        val stats = result.getOrNull()
-        assertNotNull(stats)
-        assertEquals(liveMatch.id, stats!!.matchId)
-        assertTrue("Must contain periods", stats.periods.isNotEmpty())
+        assertTrue("Result must fail when remote stats are unavailable instead of returning fake hardcoded stats", result.isFailure)
     }
 
     @Test
@@ -161,19 +148,20 @@ class ScoreboardRepositoryTest {
     }
 
     @Test
-    fun `getMatchStatistics should cache statistics for finished matches`() = runBlocking {
+    fun `getMatchStatistics should cache statistics for finished matches when remote api succeeds`() = runBlocking {
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+        val remoteStats = MockStatsData.generate(finishedMatch)
         var apiFetchCount = 0
         val trackingStatsApi = object : TennisStatsApi() {
             override fun fetchStatistics(match: Match): Result<MatchStatistics> {
                 apiFetchCount++
-                return Result.failure(java.io.IOException("Remote unavailable"))
+                return Result.success(remoteStats)
             }
         }
         val repository = ScoreboardRepositoryImpl(
             context = null,
             statsApi = trackingStatsApi
         )
-        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
 
         val firstResult = repository.getMatchStatistics(finishedMatch)
         assertTrue(firstResult.isSuccess)
@@ -186,18 +174,19 @@ class ScoreboardRepositoryTest {
 
     @Test
     fun `clearStatsCache should purge in-memory statistics cache`() = runBlocking {
+        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
+        val remoteStats = MockStatsData.generate(finishedMatch)
         var apiFetchCount = 0
         val trackingStatsApi = object : TennisStatsApi() {
             override fun fetchStatistics(match: Match): Result<MatchStatistics> {
                 apiFetchCount++
-                return Result.failure(java.io.IOException("Remote unavailable"))
+                return Result.success(remoteStats)
             }
         }
         val repository = ScoreboardRepositoryImpl(
             context = null,
             statsApi = trackingStatsApi
         )
-        val finishedMatch = MockTournamentData.matches.first { it.state == MatchState.FINISHED }
 
         repository.getMatchStatistics(finishedMatch)
         assertEquals(1, apiFetchCount)

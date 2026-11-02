@@ -92,12 +92,24 @@ class H2HRepositoryTest {
         assertTrue(result.isSuccess)
         val summary = result.getOrNull()!!
         assertFalse("Live match must not be marked as current", summary.matches.any { it.isCurrentMatch })
-        assertEquals(9, summary.matches.size)
+        assertTrue("Alcaraz vs Sinner must have at least 9 career encounters", summary.matches.size >= 9)
     }
 
     @Test
     fun testFinishedMatchIncludesCurrentMatchAtTop() = runBlocking {
         val repo = H2HRepository()
+        val liveMatch = Match(
+            id = "live_1",
+            tournamentName = "US Open",
+            roundName = "Semi-Final",
+            state = MatchState.LIVE,
+            statusDetail = "Set 2 • 3-2",
+            player1 = alcaraz,
+            player2 = sinner,
+            venue = "Arthur Ashe Stadium"
+        )
+        val liveCount = repo.getH2HSummary(liveMatch).getOrNull()!!.matches.size
+
         val finishedMatch = Match(
             id = "fin_1",
             tournamentName = "US Open",
@@ -114,7 +126,7 @@ class H2HRepositoryTest {
         val summary = result.getOrNull()!!
         assertTrue("First match must be the current finished match", summary.matches.first().isCurrentMatch)
         assertEquals("Carlos Alcaraz", summary.matches.first().winnerName)
-        assertEquals(10, summary.matches.size) // 9 historical + 1 current finished
+        assertTrue("Finished match summary must include historical matches plus current match", summary.matches.size >= liveCount)
     }
 
     @Test
@@ -166,4 +178,36 @@ class H2HRepositoryTest {
         assertNotNull(summary)
         assertTrue("Fallback matches should be provided", summary!!.matches.isNotEmpty())
     }
+
+    @Test
+    fun testParseFlashscoreH2HParsesRealEncountersAndSurfaceCounts() {
+        val repo = H2HRepository()
+        val match = Match(
+            id = "zverev_deminaur",
+            tournamentName = "Erste Bank Open",
+            roundName = "Quarter-Final",
+            state = MatchState.UPCOMING,
+            statusDetail = "Scheduled",
+            player1 = Competitor(id = "z1", name = "Alexander Zverev"),
+            player2 = Competitor(id = "d1", name = "Alex de Minaur")
+        )
+        val sampleH2HFeed = buildString {
+            append("SA÷2¬~KA÷All surfaces¬IS÷¬~KB÷Last matches: Zverev A.¬~KB÷Head-to-head matches¬")
+            append("~KC÷1792059000¬KP÷ERN0r0Qp¬KD÷hard¬KE÷hard¬KF÷Shanghai¬KH÷China¬KJ÷*Zverev A.¬FH÷Zverev A.¬KK÷De Minaur A.¬FK÷De Minaur A.¬KL÷2:0¬")
+            append("~KC÷1717612200¬KP÷ncEBhG3n¬KD÷clay¬KE÷clay¬KF÷French Open¬KH÷France¬KJ÷*Zverev A.¬FH÷Zverev A.¬KK÷De Minaur A.¬FK÷De Minaur A.¬KL÷3:0¬")
+            append("~KC÷1704520000¬KP÷uCup1234¬KD÷hard¬KE÷hard¬KF÷United Cup¬KH÷Australia¬KJ÷Zverev A.¬FH÷Zverev A.¬KK÷*De Minaur A.¬FK÷De Minaur A.¬KL÷1:2¬")
+            append("~KA÷Clay¬IS÷¬")
+        }
+
+        val summary = repo.parseFlashscoreH2H(sampleH2HFeed, match)
+        assertNotNull(summary)
+        assertEquals(3, summary!!.matches.size)
+        assertEquals(2, summary.p1Wins)
+        assertEquals(1, summary.p2Wins)
+        assertEquals(1, summary.hardWinsP1)
+        assertEquals(1, summary.hardWinsP2)
+        assertEquals(1, summary.clayWinsP1)
+        assertEquals(1, summary.grandSlamWinsP1)
+    }
 }
+

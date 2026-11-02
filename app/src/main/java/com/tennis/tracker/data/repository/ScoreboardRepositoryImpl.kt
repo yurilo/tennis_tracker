@@ -2,7 +2,6 @@ package com.tennis.tracker.data.repository
 
 import android.content.Context
 import com.tennis.tracker.data.local.MatchCacheManager
-import com.tennis.tracker.data.local.MockStatsData
 import com.tennis.tracker.data.local.MockTournamentData
 import com.tennis.tracker.data.remote.EspnScoreboardApi
 import com.tennis.tracker.data.remote.EspnWatchApi
@@ -68,14 +67,15 @@ class ScoreboardRepositoryImpl(
                 Result.failure(t)
             }
 
-            val stats = if (remoteResult.isSuccess && remoteResult.getOrNull()?.periods?.isNotEmpty() == true) {
-                remoteResult.getOrNull()!!
+            if (remoteResult.isSuccess && remoteResult.getOrNull()?.periods?.isNotEmpty() == true) {
+                val stats = remoteResult.getOrNull()!!
+                statsCache[match.id] = stats
+                Result.success(stats)
             } else {
-                MockStatsData.generate(match)
+                val error = remoteResult.exceptionOrNull()
+                    ?: NoSuchElementException("Match statistics are not available for this match yet.")
+                Result.failure(error)
             }
-
-            statsCache[match.id] = stats
-            Result.success(stats)
         }
     }
 
