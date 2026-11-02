@@ -81,8 +81,10 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val repository = ScoreboardRepositoryImpl.getInstance(context)
-                        repository.getScoreboard(forceRefresh = true)
-                        WidgetAutoSyncManager.recordSyncResult(context, true)
+                        val result = repository.getScoreboard(forceRefresh = true)
+                        val freshMatches = result.getOrNull() ?: com.tennis.tracker.data.local.MatchCacheManager.loadMatches(context)
+                        FollowManager.getInstance(context).cleanupExpiredFollowedMatches(context, freshMatches)
+                        WidgetAutoSyncManager.recordSyncResult(context, result.isSuccess)
                     } catch (_: Throwable) {
                         WidgetAutoSyncManager.recordSyncResult(context, false)
                     } finally {
@@ -147,8 +149,10 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                 try {
                     if (WidgetAutoSyncManager.isAutoSyncEnabled(context)) {
                         val repository = ScoreboardRepositoryImpl.getInstance(context)
-                        repository.getScoreboard(forceRefresh = true)
-                        WidgetAutoSyncManager.recordSyncResult(context, true)
+                        val result = repository.getScoreboard(forceRefresh = true)
+                        val freshMatches = result.getOrNull() ?: com.tennis.tracker.data.local.MatchCacheManager.loadMatches(context)
+                        FollowManager.getInstance(context).cleanupExpiredFollowedMatches(context, freshMatches)
+                        WidgetAutoSyncManager.recordSyncResult(context, result.isSuccess)
                     }
                 } catch (_: Throwable) {
                     WidgetAutoSyncManager.recordSyncResult(context, false)
@@ -272,10 +276,15 @@ class FollowedMatchesWidgetProvider : AppWidgetProvider() {
                 var liveCount = 0
                 try {
                     val followManager = FollowManager.getInstance(context)
+                    val matches = com.tennis.tracker.data.local.MatchCacheManager.loadMatches(context)
+                    val nowMillis = System.currentTimeMillis()
+                    followManager.cleanupExpiredFollowedMatches(context, matches, nowMillis)
                     val followedIds = followManager.getFollowedMatchIds()
-                    val repository = ScoreboardRepositoryImpl.getInstance(context)
-                    val matches = repository.getOfflineScoreboard()
-                    liveCount = matches.count { it.state == MatchState.LIVE && it.id in followedIds }
+                    liveCount = matches.count {
+                        it.state == MatchState.LIVE &&
+                            it.id in followedIds &&
+                            !followManager.isStaleIncompleteMatch(it, nowMillis)
+                    }
 
                     if (liveCount > 0) {
                         views.setViewVisibility(R.id.txt_widget_live_count, View.VISIBLE)

@@ -41,39 +41,37 @@ class FollowedMatchesRemoteViewsFactory(
         try {
             val followManager = FollowManager.getInstance(context)
             val repository = ScoreboardRepositoryImpl.getInstance(context)
-            var allMatches = repository.getOfflineScoreboard()
-            if (allMatches.isEmpty()) {
-                allMatches = com.tennis.tracker.data.local.MatchCacheManager.loadMatches(context)
-            }
+            var allMatches = com.tennis.tracker.data.local.MatchCacheManager.loadMatches(context)
+            val isCacheStale = !com.tennis.tracker.data.local.MatchCacheManager.isCacheFresh(context)
 
-            // If still empty on boot/login, attempt quick network fetch so tournament matches are loaded
-            if (allMatches.isEmpty()) {
+            // Refresh from network whenever cache is empty or stale (> TTL)
+            if (allMatches.isEmpty() || isCacheStale) {
                 try {
                     val fetchResult = kotlinx.coroutines.runBlocking {
-                        kotlinx.coroutines.withTimeoutOrNull(4000L) {
+                        kotlinx.coroutines.withTimeoutOrNull(4500L) {
                             repository.getScoreboard(forceRefresh = true)
                         }
                     }
                     if (fetchResult != null && fetchResult.isSuccess) {
-                        allMatches = fetchResult.getOrNull() ?: allMatches
+                        val fetched = fetchResult.getOrNull()
+                        if (!fetched.isNullOrEmpty()) {
+                            allMatches = fetched
+                            WidgetAutoSyncManager.recordSyncResult(context, true)
+                        }
                     }
                 } catch (_: Throwable) {}
             }
 
-            // Fallback to mock tournament data if completely offline on initial startup
-            if (allMatches.isEmpty()) {
-                allMatches = com.tennis.tracker.data.local.MockTournamentData.matches
-            }
-
-            // Automatically clean up any finished matches that completed >= 24 hours ago
-            followManager.cleanupExpiredFollowedMatches(context, allMatches)
+            // Automatically clean up any finished or stale matches that completed past the retention policy
+            val nowMillis = System.currentTimeMillis()
+            followManager.cleanupExpiredFollowedMatches(context, allMatches, nowMillis)
 
             var followedIds = followManager.getFollowedMatchIds()
             var filtered = allMatches.filter { it.id in followedIds }
 
             // If user follows matches but they weren't in local cache, attempt synchronous fetch
             // (safe because RemoteViewsFactory methods run on a background binder worker thread)
-            if (followedIds.isNotEmpty() && filtered.isEmpty()) {
+            if (followedIds.isNotEmpty() && filtered.isEmpty() && !isCacheStale) {
                 try {
                     val fetchResult = kotlinx.coroutines.runBlocking {
                         kotlinx.coroutines.withTimeoutOrNull(5000L) {
@@ -82,14 +80,32 @@ class FollowedMatchesRemoteViewsFactory(
                     }
                     if (fetchResult != null && fetchResult.isSuccess) {
                         allMatches = fetchResult.getOrNull() ?: allMatches
-                        followManager.cleanupExpiredFollowedMatches(context, allMatches)
+                        followManager.cleanupExpiredFollowedMatches(context, allMatches, nowMillis)
                         followedIds = followManager.getFollowedMatchIds()
                         filtered = allMatches.filter { it.id in followedIds }
                     }
                 } catch (_: Throwable) {}
             }
 
-            followedMatches = filtered
+            val policy = followManager.getActiveRetentionPolicy()
+            followedMatches = filtered.mapNotNull { match ->
+                val normalized = if (match.state != MatchState.FINISHED && followManager.isStaleIncompleteMatch(match, nowMillis)) {
+                    match.copy(state = MatchState.FINISHED, statusDetail = "Final")
+                } else {
+                    match
+                }
+                if (normalized.state == MatchState.FINISHED) {
+                    val completionTime = followManager.getCompletionTimestamp(normalized, nowMillis)
+                    if (policy.isExpired(completionTime, nowMillis)) {
+                        followManager.unfollowMatch(context, normalized.id)
+                        null
+                    } else {
+                        normalized
+                    }
+                } else {
+                    normalized
+                }
+            }
         } catch (_: Throwable) {
             followedMatches = emptyList()
         }
@@ -285,7 +301,9 @@ class FollowedMatchesRemoteViewsFactory(
 
     override fun getViewTypeCount(): Int = 1
 
-    override fun getItemId(position: Int): Long = position.toLong()
+    override fun getItemId(position: Int): Long {
+        return followedMatches.getOrNull(position)?.id?.hashCode()?.toLong() ?: position.toLong()
+    }
 
     override fun hasStableIds(): Boolean = true
 }
