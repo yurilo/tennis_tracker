@@ -911,7 +911,7 @@ private fun PeriodStatsContent(
 
             // Data source footnote
             Text(
-                text = "Official live analytics powered by Tennis Tracker & Sofascore",
+                text = "Official live court analytics • Tennis Tracker",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,
@@ -1016,7 +1016,7 @@ private fun StatItemRow(
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             color = colors.player1Color,
-            modifier = Modifier.width(60.dp),
+            modifier = Modifier.widthIn(min = 60.dp, max = 115.dp),
             textAlign = TextAlign.Start
         )
 
@@ -1036,7 +1036,7 @@ private fun StatItemRow(
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             color = colors.player2Color,
-            modifier = Modifier.width(60.dp),
+            modifier = Modifier.widthIn(min = 60.dp, max = 115.dp),
             textAlign = TextAlign.End
         )
     }

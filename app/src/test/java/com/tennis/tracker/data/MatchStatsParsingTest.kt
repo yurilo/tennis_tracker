@@ -139,4 +139,83 @@ class MatchStatsParsingTest {
         assertNotNull(statsWithEmptyScores)
         assertTrue(statsWithEmptyScores.periods.any { it.period == "ALL" })
     }
+
+    @Test
+    fun `parseFlashscoreStatistics parses real Flashscore feed with Match and Set periods, compound percentages, and orientation flipping`() {
+        val sampleFeed = buildString {
+            append("SE÷Match¬~SF÷Service¬~SG÷Aces¬SH÷8¬SI÷1¬~SG÷Double Faults¬SH÷3¬SI÷0¬")
+            append("~SG÷1st serve percentage¬SH÷70%¬SI÷74%¬")
+            append("~SG÷1st serve points won¬SH÷80% (49/61)¬SI÷65% (42/65)¬")
+            append("~SG÷Break Points Saved¬SH÷4/6¬SI÷4/7¬")
+            append("~SF÷Return¬~SG÷Break Points Converted¬SH÷3/7¬SI÷2/6¬")
+            append("~SF÷Points¬~SG÷Total Points Won¬SH÷54% (84/155)¬SI÷46% (71/155)¬")
+            append("~SE÷Set 1¬~SF÷Service¬~SG÷Aces¬SH÷4¬SI÷0¬~SG÷1st serve percentage¬SH÷72%¬SI÷68%¬")
+            append("~SE÷Set 2¬~SF÷Service¬~SG÷Aces¬SH÷4¬SI÷1¬~SG÷1st serve percentage¬SH÷68%¬SI÷80%¬")
+        }
+
+        val match = MockTournamentData.matches.first { it.state == com.tennis.tracker.domain.model.MatchState.FINISHED }
+        val api = TennisStatsApi()
+
+        val stats = api.parseFlashscoreStatistics(sampleFeed, match, isP1Home = true)
+        assertNotNull("Parsed Flashscore stats must not be null", stats)
+        assertEquals(3, stats!!.periods.size)
+        assertEquals("ALL", stats.periods[0].period)
+        assertEquals("Match", stats.periods[0].label)
+        assertEquals("1ST", stats.periods[1].period)
+        assertEquals("Set 1", stats.periods[1].label)
+        assertEquals("2ND", stats.periods[2].period)
+        assertEquals("Set 2", stats.periods[2].label)
+
+        val matchPeriod = stats.periods[0]
+        val aces = matchPeriod.findItem("Service", "Aces")
+        assertNotNull(aces)
+        assertEquals("8", aces!!.homeDisplay)
+        assertEquals("1", aces.awayDisplay)
+        assertTrue("8 vs 1 aces must yield ratio > 0.8", aces.homeRatio > 0.8f)
+
+        val firstServeWon = matchPeriod.findItem("Service", "1st serve points won")
+        assertNotNull(firstServeWon)
+        assertEquals("80% (49/61)", firstServeWon!!.homeDisplay)
+        assertEquals("65% (42/65)", firstServeWon.awayDisplay)
+        // 80 / (80 + 65) = 0.5517
+        assertTrue("80% vs 65% must use percentage ratio ~0.55, not concatenated digits", firstServeWon.homeRatio in 0.54f..0.56f)
+
+        // Verify orientation flip when isP1Home = false
+        val flipped = api.parseFlashscoreStatistics(sampleFeed, match, isP1Home = false)
+        assertNotNull(flipped)
+        val flippedAces = flipped!!.periods[0].findItem("Service", "Aces")
+        assertNotNull(flippedAces)
+        assertEquals("1", flippedAces!!.homeDisplay)
+        assertEquals("8", flippedAces.awayDisplay)
+        assertTrue("1 vs 8 aces must yield ratio < 0.2", flippedAces.homeRatio < 0.2f)
+    }
+
+    @Test
+    fun `findMatchInFlashscoreFeed matches singles and doubles matches accurately without false positives on shared surnames`() {
+        val sampleFeed = buildString {
+            append("SA÷2¬~AA÷KYnWYdAI¬AE÷Gonzalez M./Molteni A.¬AF÷Buse I./Darderi L.¬")
+            append("~AA÷Qg9ybHiD¬AE÷Gonzalez S./Stevens B.¬AF÷Gonzalez M./Molteni A.¬")
+            append("~AA÷Ei9hwBoR¬AE÷Fearnley J.¬AF÷Carreno-Busta P.¬")
+        }
+        val api = TennisStatsApi()
+
+        val doublesMatch = api.findMatchInFlashscoreFeed(
+            sampleFeed,
+            "Maximo Gonzalez / Andres Molteni",
+            "Santiago Gonzalez / Bart Stevens"
+        )
+        assertNotNull("Must find exact doubles match Qg9ybHiD", doublesMatch)
+        assertEquals("Qg9ybHiD", doublesMatch!!.first)
+        assertEquals(false, doublesMatch.second)
+
+        val singlesMatch = api.findMatchInFlashscoreFeed(
+            sampleFeed,
+            "Pablo Carreno Busta",
+            "Jacob Fearnley"
+        )
+        assertNotNull("Must find exact singles match Ei9hwBoR", singlesMatch)
+        assertEquals("Ei9hwBoR", singlesMatch!!.first)
+        assertEquals(false, singlesMatch.second)
+    }
 }
+
