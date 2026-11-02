@@ -226,4 +226,36 @@ class ScoreboardRepositoryTest {
         // Reset circuit breaker
         TennisStatsApi.sofaScoreBlockedUntil = 0L
     }
+
+    @Test
+    fun `getScoreboard with forceRefresh purges obsolete cached matches no longer on live scoreboard`() = runBlocking {
+        val staleMatch = MockTournamentData.matches.first().copy(id = "stale-match-days-ago")
+        val freshMatch = MockTournamentData.matches.last().copy(id = "fresh-match-today")
+        MatchCacheManager.saveMatches(null, listOf(staleMatch))
+
+        val freshApi = object : EspnScoreboardApi() {
+            override fun fetchScoreboard(url: String, tournament: com.tennis.tracker.domain.model.Tournament?): Result<List<Match>> {
+                return if (url == ATP_SCOREBOARD_URL) {
+                    Result.success(listOf(freshMatch))
+                } else {
+                    Result.success(emptyList())
+                }
+            }
+        }
+        val repository = ScoreboardRepositoryImpl(
+            context = null,
+            api = freshApi,
+            statsApi = object : TennisStatsApi() {
+                override fun fetchLiveGameScores(matches: List<Match>): Map<String, Pair<String, String>> = emptyMap()
+            }
+        )
+
+        val result = repository.getScoreboard(forceRefresh = true)
+        assertTrue(result.isSuccess)
+
+        val cachedAfterSync = MatchCacheManager.loadMatches(null)
+        assertEquals(listOf("fresh-match-today"), cachedAfterSync.map { it.id })
+        assertFalse("Stale match from days ago must be purged from cache after full scoreboard sync",
+            cachedAfterSync.any { it.id == "stale-match-days-ago" })
+    }
 }

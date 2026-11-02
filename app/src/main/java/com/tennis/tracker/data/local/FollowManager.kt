@@ -112,7 +112,10 @@ class FollowManager(
         val current = _followedMatchIds.value.toMutableSet()
         val isNowFollowed = if (current.contains(matchId)) {
             current.remove(matchId)
-            prefs.edit().remove(KEY_COMPLETED_PREFIX + matchId).apply()
+            prefs.edit()
+                .remove(KEY_COMPLETED_PREFIX + matchId)
+                .remove(KEY_START_TIME_PREFIX + matchId)
+                .apply()
             false
         } else {
             if (match != null && match.state == MatchState.FINISHED) {
@@ -121,6 +124,11 @@ class FollowManager(
                 if (policy.isExpired(completionTime, nowMillis)) {
                     // Match completed >= retention duration ago, cannot follow
                     return false
+                }
+            }
+            if (match != null && !match.startTime.isNullOrBlank()) {
+                com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.startTime)?.toEpochMilli()?.let { startEpoch ->
+                    prefs.edit().putLong(KEY_START_TIME_PREFIX + matchId, startEpoch).apply()
                 }
             }
             current.add(matchId)
@@ -146,7 +154,10 @@ class FollowManager(
     fun unfollowMatch(context: Context? = appContext, matchId: String) {
         val current = _followedMatchIds.value.toMutableSet()
         if (current.remove(matchId)) {
-            prefs.edit().remove(KEY_COMPLETED_PREFIX + matchId).apply()
+            prefs.edit()
+                .remove(KEY_COMPLETED_PREFIX + matchId)
+                .remove(KEY_START_TIME_PREFIX + matchId)
+                .apply()
             saveFollowedMatchIds(context, current)
         }
     }
@@ -155,40 +166,74 @@ class FollowManager(
      * Returns the current snapshot of followed match IDs.
      */
     fun getFollowedMatchIds(): Set<String> {
+        val persisted = loadFollowedMatchIds()
+        if (persisted != _followedMatchIds.value) {
+            _followedMatchIds.value = persisted
+        }
         return _followedMatchIds.value
     }
 
     /**
+     * Determines whether a match whose state is still marked LIVE or UPCOMING in cache
+     * is actually a stale match from a previous day (completed >= 8 hours ago based on startTime).
+     */
+    fun isStaleIncompleteMatch(match: Match, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (match.state == MatchState.FINISHED) return false
+        if (!match.endTime.isNullOrBlank()) {
+            val endInstant = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.endTime)
+            if (endInstant != null && endInstant.toEpochMilli() <= nowMillis) {
+                return true
+            }
+        }
+        if (!match.startTime.isNullOrBlank()) {
+            val startInstant = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.startTime)
+            if (startInstant != null) {
+                val durationMinutes = match.durationMinutes?.toLong() ?: estimateDurationMinutes(match)
+                val estimatedEnd = startInstant.plusSeconds(durationMinutes * 60L).toEpochMilli()
+                return (nowMillis - estimatedEnd) >= STALE_INCOMPLETE_MATCH_GRACE_MILLIS
+            }
+        }
+        return false
+    }
+
+    /**
      * Resolves the completion timestamp in epoch milliseconds for a finished match.
-     * Uses previously recorded timestamp, or parses match.endTime, or match.startTime + duration.
+     * Uses match.endTime or match.startTime + duration when available (taking the earlier of
+     * stored and computed timestamps so late wakeups never delay expiration of old matches),
+     * falling back to previously stored timestamp or nowMillis.
      */
     fun getCompletionTimestamp(match: Match, nowMillis: Long = System.currentTimeMillis()): Long {
         val stored = prefs.getLong(KEY_COMPLETED_PREFIX + match.id, -1L)
+
+        // 1. Compute deterministic completion time from match.endTime or match.startTime + duration
+        val computedEpoch: Long? = run {
+            if (!match.endTime.isNullOrBlank()) {
+                val parsedEnd = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.endTime)
+                if (parsedEnd != null) {
+                    return@run parsedEnd.toEpochMilli()
+                }
+            }
+            if (!match.startTime.isNullOrBlank()) {
+                val parsedStart = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.startTime)
+                if (parsedStart != null) {
+                    val durationMinutes = match.durationMinutes?.toLong() ?: estimateDurationMinutes(match)
+                    val estimatedEnd = parsedStart.plusSeconds(durationMinutes * 60L).toEpochMilli()
+                    return@run minOf(estimatedEnd, nowMillis)
+                }
+            }
+            null
+        }
+
+        if (computedEpoch != null) {
+            val effective = if (stored > 0L) minOf(stored, computedEpoch) else computedEpoch
+            if (effective != stored) {
+                prefs.edit().putLong(KEY_COMPLETED_PREFIX + match.id, effective).apply()
+            }
+            return effective
+        }
+
         if (stored > 0L) {
             return stored
-        }
-
-        // 1. Try match.endTime
-        if (!match.endTime.isNullOrBlank()) {
-            val parsedEnd = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.endTime)
-            if (parsedEnd != null) {
-                val epoch = parsedEnd.toEpochMilli()
-                prefs.edit().putLong(KEY_COMPLETED_PREFIX + match.id, epoch).apply()
-                return epoch
-            }
-        }
-
-        // 2. Try match.startTime + duration
-        if (!match.startTime.isNullOrBlank()) {
-            val parsedStart = com.tennis.tracker.util.TimezoneFormatter.parseToInstant(match.startTime)
-            if (parsedStart != null) {
-                val durationMinutes = match.durationMinutes?.toLong() ?: estimateDurationMinutes(match)
-                val estimatedEnd = parsedStart.plusSeconds(durationMinutes * 60L).toEpochMilli()
-                // A finished match cannot complete in the future relative to nowMillis
-                val epoch = minOf(estimatedEnd, nowMillis)
-                prefs.edit().putLong(KEY_COMPLETED_PREFIX + match.id, epoch).apply()
-                return epoch
-            }
         }
 
         // 3. Fallback: record now as completion timestamp
@@ -213,7 +258,8 @@ class FollowManager(
     }
 
     /**
-     * Automatically removes any followed matches that are in FINISHED state and have expired under the active retention policy.
+     * Automatically removes any followed matches that are in FINISHED state (or stale cached matches
+     * no longer in the live schedule) and have expired under the active retention policy.
      * When retention policy is NEVER, skips cleanup completely, retaining matches indefinitely.
      * Returns the set of match IDs that were removed.
      */
@@ -239,7 +285,7 @@ class FollowManager(
             return emptySet()
         }
 
-        val currentFollowed = _followedMatchIds.value
+        val currentFollowed = getFollowedMatchIds()
         if (currentFollowed.isEmpty()) return emptySet()
 
         val matchesMap = allMatches.associateBy { it.id }
@@ -247,20 +293,20 @@ class FollowManager(
         val editor = prefs.edit()
 
         for (matchId in currentFollowed) {
-            val match = matchesMap[matchId] ?: run {
-                if (context != null) {
-                    try {
-                        MatchCacheManager.loadMatches(context).firstOrNull { it.id == matchId }
-                    } catch (_: Throwable) { null }
-                } else null
-            }
+            val inLiveSchedule = matchesMap.containsKey(matchId)
+            val match = matchesMap[matchId] ?: try {
+                MatchCacheManager.loadMatches(context).firstOrNull { it.id == matchId }
+            } catch (_: Throwable) { null }
 
             if (match != null) {
-                if (match.state == MatchState.FINISHED) {
+                val isEffectivelyFinished = match.state == MatchState.FINISHED ||
+                    (!inLiveSchedule && isStaleIncompleteMatch(match, nowMillis))
+                if (isEffectivelyFinished) {
                     val completionTime = getCompletionTimestamp(match, nowMillis)
                     if (policy.isExpired(completionTime, nowMillis)) {
                         toRemove.add(matchId)
                         editor.remove(KEY_COMPLETED_PREFIX + matchId)
+                        editor.remove(KEY_START_TIME_PREFIX + matchId)
                     }
                 }
             } else {
@@ -269,6 +315,7 @@ class FollowManager(
                 if (stored > 0L && policy.isExpired(stored, nowMillis)) {
                     toRemove.add(matchId)
                     editor.remove(KEY_COMPLETED_PREFIX + matchId)
+                    editor.remove(KEY_START_TIME_PREFIX + matchId)
                 }
             }
         }
@@ -315,7 +362,9 @@ class FollowManager(
         const val PREFS_NAME = "tennis_followed_matches"
         const val KEY_FOLLOWED_MATCHES = "followed_match_ids"
         const val KEY_COMPLETED_PREFIX = "match_completed_at_"
+        const val KEY_START_TIME_PREFIX = "match_start_at_"
         const val EXPIRATION_MILLIS = 24 * 60 * 60 * 1000L // 24 hours canonical fallback
+        const val STALE_INCOMPLETE_MATCH_GRACE_MILLIS = 8 * 60 * 60 * 1000L // 8 hours past estimated end
 
         @Volatile
         private var instance: FollowManager? = null

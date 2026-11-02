@@ -202,10 +202,27 @@ class ScoreboardRepositoryImpl(
             }
 
             val sorted = sortMatches(finalMatches)
-            val existingCached = loadCached()
-            val updatedIds = sorted.map { it.id }.toSet()
-            val mergedCache = existingCached.filterNot { it.id in updatedIds } + sorted
-            MatchCacheManager.saveMatches(appContext, mergedCache)
+            val cacheToSave = if (targetTournament == Tournaments.ALL) {
+                when {
+                    atpResult.isSuccess && wtaResult.isSuccess -> sorted
+                    atpResult.isSuccess -> {
+                        val existingCached = loadCached()
+                        val updatedIds = sorted.map { it.id }.toSet()
+                        existingCached.filterNot { it.id in updatedIds || it.effectiveTour.isAtp } + sorted
+                    }
+                    wtaResult.isSuccess -> {
+                        val existingCached = loadCached()
+                        val updatedIds = sorted.map { it.id }.toSet()
+                        existingCached.filterNot { it.id in updatedIds || it.effectiveTour.isWta } + sorted
+                    }
+                    else -> sorted
+                }
+            } else {
+                val existingCached = loadCached()
+                val updatedIds = sorted.map { it.id }.toSet()
+                existingCached.filterNot { it.id in updatedIds || targetTournament.matches(it.tournamentName) } + sorted
+            }
+            MatchCacheManager.saveMatches(appContext, cacheToSave)
             Result.success(sorted)
         } else {
             // If network returned empty or failed, fall back to local cached matches if available

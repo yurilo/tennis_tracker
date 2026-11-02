@@ -245,11 +245,10 @@ class ScoreboardViewModel(
             followManager = it
             attachFollowManager(it)
         }
-        val current = _uiState.value.allMatches.ifEmpty {
-            com.tennis.tracker.data.local.MatchCacheManager.loadMatches(appCtx)
-        }
+        val cachedOnDisk = com.tennis.tracker.data.local.MatchCacheManager.loadMatches(appCtx)
+        val current = cachedOnDisk.ifEmpty { _uiState.value.allMatches }
         if (current.isNotEmpty()) {
-            if (_uiState.value.allMatches.isEmpty()) {
+            if (_uiState.value.allMatches.isEmpty() || cachedOnDisk.isNotEmpty()) {
                 _uiState.update { state ->
                     val contextual = computeContextualTournaments(current, state.selectedTierFilter, state.currentTournament)
                     state.copy(
@@ -261,11 +260,19 @@ class ScoreboardViewModel(
                     )
                 }
             }
-            com.tennis.tracker.data.local.MatchCacheManager.saveMatches(appCtx, current)
+            if (cachedOnDisk.isEmpty() && com.tennis.tracker.data.local.MatchCacheManager.getLastSavedTimestamp(appCtx) == 0L) {
+                val mockIds = com.tennis.tracker.data.local.MockTournamentData.matches.map { it.id }.toSet()
+                if (current.any { it.id !in mockIds }) {
+                    com.tennis.tracker.data.local.MatchCacheManager.saveMatches(appCtx, current)
+                }
+            }
             fm.cleanupExpiredFollowedMatches(appCtx, current)
         }
         val followedIds = fm.getFollowedMatchIds()
         setFollowedMatches(followedIds)
+        if (!com.tennis.tracker.data.local.MatchCacheManager.isCacheFresh(appCtx)) {
+            loadMatches(forceRefresh = true)
+        }
     }
 
     private fun attachFollowManager(fm: FollowManager) {

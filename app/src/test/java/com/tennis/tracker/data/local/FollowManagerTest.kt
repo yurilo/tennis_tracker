@@ -253,4 +253,58 @@ class FollowManagerTest {
         assertTrue("Should allow following a recently finished match", isFollowed)
         assertTrue(followManager.isFollowed(recentMatch.id))
     }
+
+    @Test
+    fun `cleanupExpiredFollowedMatches removes match followed while LIVE 3 days ago that dropped off schedule`() {
+        val nowInstant = Instant.parse("2026-11-02T12:00:00Z")
+        val nowMillis = nowInstant.toEpochMilli()
+        val start3DaysAgo = nowInstant.minusSeconds(72 * 3600L).toString()
+
+        val liveMatch3DaysAgo = createMatch(
+            id = "m-live-3d-ago",
+            state = MatchState.LIVE,
+            startTime = start3DaysAgo,
+            durationMinutes = 95
+        )
+
+        // User followed match 3 days ago while it was LIVE and cached in MatchCacheManager
+        MatchCacheManager.saveMatches(null, listOf(liveMatch3DaysAgo))
+        try {
+            followManager.toggleFollow(null, liveMatch3DaysAgo.id, liveMatch3DaysAgo, null, nowMillis - (72 * 3600_000L))
+            assertTrue(followManager.isFollowed(liveMatch3DaysAgo.id))
+
+            // 3 days later, match has dropped off the live tournament schedule (allMatches is empty)
+            val removed = followManager.cleanupExpiredFollowedMatches(
+                context = null,
+                allMatches = emptyList(),
+                nowMillis = nowMillis
+            )
+
+            assertEquals(setOf("m-live-3d-ago"), removed)
+            assertFalse(followManager.isFollowed(liveMatch3DaysAgo.id))
+        } finally {
+            MatchCacheManager.clearCache(null)
+        }
+    }
+
+    @Test
+    fun `getCompletionTimestamp uses deterministic startTime plus duration even if late fallback timestamp was stored`() {
+        val nowInstant = Instant.parse("2026-11-02T12:00:00Z")
+        val nowMillis = nowInstant.toEpochMilli()
+        val start3DaysAgo = nowInstant.minusSeconds(72 * 3600L)
+
+        // Simulate a late wakeup timestamp stored in prefs today, while match actually started 3 days ago
+        fakePrefs.edit().putLong(FollowManager.KEY_COMPLETED_PREFIX + "m-3d-old", nowMillis - 3600_000L).apply()
+
+        val oldFinishedMatch = createMatch(
+            id = "m-3d-old",
+            state = MatchState.FINISHED,
+            startTime = start3DaysAgo.toString(),
+            durationMinutes = 120
+        )
+
+        val expectedCompletion = start3DaysAgo.plusSeconds(120 * 60L).toEpochMilli()
+        val resolved = followManager.getCompletionTimestamp(oldFinishedMatch, nowMillis)
+        assertEquals(expectedCompletion, resolved)
+    }
 }
