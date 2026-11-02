@@ -1032,12 +1032,13 @@ fun TourTierChipsRow(
     ) {
         for (tier in TourTierFilter.values()) {
             val isSelected = selectedTier == tier
+            val labelText = if (tier == TourTierFilter.ALL) "All Tours" else tier.displayName
             FilterChip(
                 selected = isSelected,
                 onClick = { onTierSelected(tier) },
                 label = {
                     Text(
-                        text = "${tier.icon} ${tier.displayName}",
+                        text = "${tier.icon} $labelText",
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         maxLines = 1,
@@ -1080,12 +1081,17 @@ fun ContextualTournamentChipsRow(
                 tourney.isGrandSlam -> "🏆"
                 else -> tourney.surface.icon
             }
+            val chipLabel = if (tourney.id.equals("all", ignoreCase = true)) {
+                "All Tournaments"
+            } else {
+                tourney.shortDisplayName
+            }
             FilterChip(
                 selected = isSelected,
                 onClick = { onTournamentSelected(tourney) },
                 label = {
                     Text(
-                        text = "$iconPrefix ${tourney.shortDisplayName}",
+                        text = "$iconPrefix $chipLabel",
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         maxLines = 1,

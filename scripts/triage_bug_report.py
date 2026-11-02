@@ -721,18 +721,12 @@ def get_deterministic_candidate_patch(category: str, user_text: str = "") -> str
         return """```diff
 --- a/app/src/main/java/com/tennis/tracker/ui/viewmodel/ScoreboardViewModel.kt
 +++ b/app/src/main/java/com/tennis/tracker/ui/viewmodel/ScoreboardViewModel.kt
-@@ -520,6 +520,11 @@ class ScoreboardViewModel : ViewModel() {
-         val newTournament = getTierAllTournament(tier)
+@@ -520,6 +520,10 @@ class ScoreboardViewModel : ViewModel() {
+         val newTournament = preservedTournament ?: defaultTierTournament
          val contextual = computeContextualTournaments(state.allMatches, tier, newTournament)
          repository.setActiveTournament(newTournament)
-+        val adjustedMatchType = when {
-+            tier == TourTierFilter.ATP_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.WTA -> MatchTypeFilter.ALL
-+            tier == TourTierFilter.WTA_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.ATP -> MatchTypeFilter.ALL
-+            else -> state.selectedMatchTypeFilter
-+        }
          state.copy(
              selectedTierFilter = tier,
-+            selectedMatchTypeFilter = adjustedMatchType,
              currentTournament = newTournament,
 ```"""
     elif norm_cat == "SCORE_LIVE_DATA":

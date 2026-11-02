@@ -522,17 +522,30 @@ class ScoreboardViewModel(
 
     fun selectTierFilter(tier: TourTierFilter) {
         _uiState.update { state ->
-            val newTournament = getTierAllTournament(tier)
+            val currentTourney = state.currentTournament
+            val isSpecificTournamentSelected = !currentTourney.id.equals("all", ignoreCase = true) &&
+                !currentTourney.id.startsWith("all_") &&
+                tier != state.selectedTierFilter
+
+            val defaultTierTournament = getTierAllTournament(tier)
+            val candidateContextual = computeContextualTournaments(state.allMatches, tier, null)
+            val preservedTournament = if (isSpecificTournamentSelected) {
+                candidateContextual.firstOrNull {
+                    !it.id.equals("all", ignoreCase = true) &&
+                        !it.id.startsWith("all_") &&
+                        (it.id.equals(currentTourney.id, ignoreCase = true) ||
+                            it.matches(currentTourney.displayName) ||
+                            currentTourney.matches(it.displayName))
+                }
+            } else {
+                null
+            }
+
+            val newTournament = preservedTournament ?: defaultTierTournament
             val contextual = computeContextualTournaments(state.allMatches, tier, newTournament)
             repository.setActiveTournament(newTournament)
-            val adjustedMatchType = when {
-                tier == TourTierFilter.ATP_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.WTA -> MatchTypeFilter.ALL
-                tier == TourTierFilter.WTA_TOUR && state.selectedMatchTypeFilter == MatchTypeFilter.ATP -> MatchTypeFilter.ALL
-                else -> state.selectedMatchTypeFilter
-            }
             state.copy(
                 selectedTierFilter = tier,
-                selectedMatchTypeFilter = adjustedMatchType,
                 currentTournament = newTournament,
                 contextualTournaments = contextual,
                 availableTournaments = contextual,
@@ -540,7 +553,7 @@ class ScoreboardViewModel(
                     matches = state.allMatches,
                     tier = tier,
                     tournament = newTournament,
-                    matchType = adjustedMatchType,
+                    matchType = state.selectedMatchTypeFilter,
                     filter = state.selectedFilter,
                     query = state.searchQuery,
                     followedIds = state.followedMatchIds

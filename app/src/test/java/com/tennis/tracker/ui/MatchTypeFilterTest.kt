@@ -79,7 +79,18 @@ class MatchTypeFilterTest {
     }
 
     @Test
-    fun `MatchTypeFilter matches Men's Singles in Combined Grand Slam`() {
+    fun `MatchTypeFilter exposes strictly ALL, SINGLES, and DOUBLES without duplicate ATP or WTA`() {
+        assertEquals(
+            listOf(MatchTypeFilter.ALL, MatchTypeFilter.SINGLES, MatchTypeFilter.DOUBLES),
+            MatchTypeFilter.values().toList()
+        )
+        assertEquals("All Types", MatchTypeFilter.ALL.displayName)
+        assertEquals("Singles", MatchTypeFilter.SINGLES.displayName)
+        assertEquals("Doubles", MatchTypeFilter.DOUBLES.displayName)
+    }
+
+    @Test
+    fun `MatchTypeFilter and TourTierFilter match Men's Singles in Combined Grand Slam`() {
         val match = createMatch(
             id = "m1",
             player1Name = "Carlos Alcaraz",
@@ -89,14 +100,14 @@ class MatchTypeFilterTest {
         )
 
         assertTrue(MatchTypeFilter.ALL.matches(match))
-        assertTrue(MatchTypeFilter.ATP.matches(match))
-        assertFalse(MatchTypeFilter.WTA.matches(match))
         assertTrue(MatchTypeFilter.SINGLES.matches(match))
         assertFalse(MatchTypeFilter.DOUBLES.matches(match))
+        assertTrue(TourTierFilter.ATP_TOUR.matches(match))
+        assertFalse(TourTierFilter.WTA_TOUR.matches(match))
     }
 
     @Test
-    fun `MatchTypeFilter matches Women's Singles in Combined Grand Slam`() {
+    fun `MatchTypeFilter and TourTierFilter match Women's Singles in Combined Grand Slam`() {
         val match = createMatch(
             id = "m2",
             player1Name = "Aryna Sabalenka",
@@ -106,10 +117,10 @@ class MatchTypeFilterTest {
         )
 
         assertTrue(MatchTypeFilter.ALL.matches(match))
-        assertFalse(MatchTypeFilter.ATP.matches(match))
-        assertTrue(MatchTypeFilter.WTA.matches(match))
         assertTrue(MatchTypeFilter.SINGLES.matches(match))
         assertFalse(MatchTypeFilter.DOUBLES.matches(match))
+        assertFalse(TourTierFilter.ATP_TOUR.matches(match))
+        assertTrue(TourTierFilter.WTA_TOUR.matches(match))
     }
 
     @Test
@@ -129,19 +140,19 @@ class MatchTypeFilterTest {
             tournament = Tournaments.US_OPEN
         )
 
-        assertTrue(MatchTypeFilter.ATP.matches(mensDoubles))
-        assertFalse(MatchTypeFilter.WTA.matches(mensDoubles))
+        assertTrue(TourTierFilter.ATP_TOUR.matches(mensDoubles))
+        assertFalse(TourTierFilter.WTA_TOUR.matches(mensDoubles))
         assertFalse(MatchTypeFilter.SINGLES.matches(mensDoubles))
         assertTrue(MatchTypeFilter.DOUBLES.matches(mensDoubles))
 
-        assertFalse(MatchTypeFilter.ATP.matches(womensDoubles))
-        assertTrue(MatchTypeFilter.WTA.matches(womensDoubles))
+        assertFalse(TourTierFilter.ATP_TOUR.matches(womensDoubles))
+        assertTrue(TourTierFilter.WTA_TOUR.matches(womensDoubles))
         assertFalse(MatchTypeFilter.SINGLES.matches(womensDoubles))
         assertTrue(MatchTypeFilter.DOUBLES.matches(womensDoubles))
     }
 
     @Test
-    fun `MatchTypeFilter matches Mixed Doubles under DOUBLES and ALL but excludes from ATP and WTA`() {
+    fun `MatchTypeFilter matches Mixed Doubles under DOUBLES and ALL`() {
         val mixedDoubles = createMatch(
             id = "m5",
             player1Name = "S. Errani / A. Vavassori",
@@ -151,8 +162,6 @@ class MatchTypeFilterTest {
         )
 
         assertTrue(MatchTypeFilter.ALL.matches(mixedDoubles))
-        assertFalse(MatchTypeFilter.ATP.matches(mixedDoubles))
-        assertFalse(MatchTypeFilter.WTA.matches(mixedDoubles))
         assertFalse(MatchTypeFilter.SINGLES.matches(mixedDoubles))
         assertTrue(MatchTypeFilter.DOUBLES.matches(mixedDoubles))
     }
@@ -168,19 +177,20 @@ class MatchTypeFilterTest {
             tour = TourType.ATP
         )
 
-        assertTrue(MatchTypeFilter.ATP.matches(doublesWithGenericGrouping))
+        assertTrue(TourTierFilter.ATP_TOUR.matches(doublesWithGenericGrouping))
         assertFalse(MatchTypeFilter.SINGLES.matches(doublesWithGenericGrouping))
         assertTrue(MatchTypeFilter.DOUBLES.matches(doublesWithGenericGrouping))
     }
 
     @Test
-    fun `ScoreboardViewModel filters matches by MatchTypeFilter and resolves tier conflicts`() {
+    fun `ScoreboardViewModel filters matches by TourTierFilter, Tournament, MatchTypeFilter, and MatchFilter`() {
         val sampleMatches = listOf(
             createMatch("atp_s", "Carlos Alcaraz", "Novak Djokovic", "Men's Singles", Tournaments.US_OPEN, state = MatchState.LIVE),
             createMatch("wta_s", "Aryna Sabalenka", "Coco Gauff", "Women's Singles", Tournaments.US_OPEN, state = MatchState.LIVE),
             createMatch("atp_d", "R. Ram / J. Salisbury", "W. Koolhof / N. Mektic", "Men's Doubles", Tournaments.US_OPEN, state = MatchState.UPCOMING),
             createMatch("wta_d", "S. Hsieh / E. Mertens", "K. Siniakova / T. Townsend", "Women's Doubles", Tournaments.US_OPEN, state = MatchState.FINISHED),
-            createMatch("mix_d", "S. Errani / A. Vavassori", "T. Townsend / D. Young", "Mixed Doubles", Tournaments.US_OPEN, state = MatchState.FINISHED)
+            createMatch("mix_d", "S. Errani / A. Vavassori", "T. Townsend / D. Young", "Mixed Doubles", Tournaments.US_OPEN, state = MatchState.FINISHED),
+            createMatch("bcn_s", "Stefanos Tsitsipas", "Casper Ruud", "Men's Singles", barcelonaAtpTournament, tour = TourType.ATP, state = MatchState.LIVE)
         )
 
         val fakeRepo = object : ScoreboardRepository {
@@ -198,44 +208,47 @@ class MatchTypeFilterTest {
         )
 
         try {
-            // Initially ALL (5 matches)
+            // Initially ALL (6 matches)
             assertEquals(MatchTypeFilter.ALL, viewModel.uiState.value.selectedMatchTypeFilter)
-            assertEquals(5, viewModel.uiState.value.filteredMatches.size)
+            assertEquals(6, viewModel.uiState.value.filteredMatches.size)
 
-            // Filter by ATP -> Men's Singles + Men's Doubles (2 matches)
-            viewModel.selectMatchTypeFilter(MatchTypeFilter.ATP)
-            assertEquals(MatchTypeFilter.ATP, viewModel.uiState.value.selectedMatchTypeFilter)
-            assertEquals(listOf("atp_s", "atp_d"), viewModel.uiState.value.filteredMatches.map { it.id })
+            // Filter by SINGLES -> Men's Singles + Women's Singles + Barcelona Singles (3 matches)
+            viewModel.selectMatchTypeFilter(MatchTypeFilter.SINGLES)
+            assertEquals(MatchTypeFilter.SINGLES, viewModel.uiState.value.selectedMatchTypeFilter)
+            assertEquals(listOf("atp_s", "wta_s", "bcn_s"), viewModel.uiState.value.filteredMatches.map { it.id })
 
-            // Filter by WTA -> Women's Singles + Women's Doubles (2 matches)
-            viewModel.selectMatchTypeFilter(MatchTypeFilter.WTA)
-            assertEquals(MatchTypeFilter.WTA, viewModel.uiState.value.selectedMatchTypeFilter)
-            assertEquals(listOf("wta_s", "wta_d"), viewModel.uiState.value.filteredMatches.map { it.id })
+            // Combine SINGLES + WTA_TOUR -> Women's Singles (1 match)
+            viewModel.selectTierFilter(TourTierFilter.WTA_TOUR)
+            assertEquals(MatchTypeFilter.SINGLES, viewModel.uiState.value.selectedMatchTypeFilter)
+            assertEquals(listOf("wta_s"), viewModel.uiState.value.filteredMatches.map { it.id })
 
-            // Selecting ATP_TOUR tier while WTA match type is active resets MatchTypeFilter to ALL
+            // Combine SINGLES + ATP_TOUR -> US Open Men's Singles + Barcelona Men's Singles (2 matches)
             viewModel.selectTierFilter(TourTierFilter.ATP_TOUR)
-            assertEquals(MatchTypeFilter.ALL, viewModel.uiState.value.selectedMatchTypeFilter)
+            assertEquals(MatchTypeFilter.SINGLES, viewModel.uiState.value.selectedMatchTypeFilter)
+            assertEquals(listOf("atp_s", "bcn_s"), viewModel.uiState.value.filteredMatches.map { it.id })
+
+            // Select US Open specifically while on ATP_TOUR + SINGLES -> US Open Men's Singles (1 match)
+            viewModel.selectTournament(Tournaments.US_OPEN)
+            assertEquals("us_open", viewModel.uiState.value.currentTournament.id)
+            assertEquals(listOf("atp_s"), viewModel.uiState.value.filteredMatches.map { it.id })
+
+            // Switching tier from ATP_TOUR to WTA_TOUR while US Open is selected preserves US Open!
+            viewModel.selectTierFilter(TourTierFilter.WTA_TOUR)
+            assertEquals("us_open", viewModel.uiState.value.currentTournament.id)
+            assertEquals(listOf("wta_s"), viewModel.uiState.value.filteredMatches.map { it.id })
+
+            // Switching tier to TIER_500_250 (where US Open is NOT valid) resets tournament to all_500_250
+            viewModel.selectTierFilter(TourTierFilter.TIER_500_250)
+            assertEquals("all_500_250", viewModel.uiState.value.currentTournament.id)
+            assertEquals(listOf("bcn_s"), viewModel.uiState.value.filteredMatches.map { it.id })
 
             // Reset tier to ALL, select DOUBLES -> Men's Doubles, Women's Doubles, Mixed Doubles (3 matches)
             viewModel.selectTierFilter(TourTierFilter.ALL)
             viewModel.selectMatchTypeFilter(MatchTypeFilter.DOUBLES)
             assertEquals(listOf("atp_d", "wta_d", "mix_d"), viewModel.uiState.value.filteredMatches.map { it.id })
 
-            // Switching tier between ATP_TOUR and WTA_TOUR preserves DOUBLES (including Mixed Doubles in combined slams)
-            viewModel.selectTierFilter(TourTierFilter.ATP_TOUR)
-            assertEquals(MatchTypeFilter.DOUBLES, viewModel.uiState.value.selectedMatchTypeFilter)
-            assertEquals(listOf("atp_d", "mix_d"), viewModel.uiState.value.filteredMatches.map { it.id })
-
-            viewModel.selectTierFilter(TourTierFilter.WTA_TOUR)
-            assertEquals(MatchTypeFilter.DOUBLES, viewModel.uiState.value.selectedMatchTypeFilter)
-            assertEquals(listOf("wta_d", "mix_d"), viewModel.uiState.value.filteredMatches.map { it.id })
-
-            // Filter by SINGLES across ALL tiers -> Men's Singles + Women's Singles (2 matches)
-            viewModel.selectTierFilter(TourTierFilter.ALL)
-            viewModel.selectMatchTypeFilter(MatchTypeFilter.SINGLES)
-            assertEquals(listOf("atp_s", "wta_s"), viewModel.uiState.value.filteredMatches.map { it.id })
-
             // Combine SINGLES + LIVE + search query
+            viewModel.selectMatchTypeFilter(MatchTypeFilter.SINGLES)
             viewModel.setFilter(MatchFilter.LIVE)
             viewModel.onSearchQueryChange("Sabalenka")
             assertEquals(listOf("wta_s"), viewModel.uiState.value.filteredMatches.map { it.id })
@@ -263,10 +276,10 @@ class MatchTypeFilterTest {
             tour = resolvedWomenSingles.tour
         )
 
-        assertFalse("WTA Japan Open match must NOT match MatchTypeFilter.ATP", MatchTypeFilter.ATP.matches(japanWomenMatch))
-        assertTrue("WTA Japan Open match MUST match MatchTypeFilter.WTA", MatchTypeFilter.WTA.matches(japanWomenMatch))
         assertFalse("WTA Japan Open match must NOT match TourTierFilter.ATP_TOUR", TourTierFilter.ATP_TOUR.matches(japanWomenMatch))
         assertTrue("WTA Japan Open match MUST match TourTierFilter.WTA_TOUR", TourTierFilter.WTA_TOUR.matches(japanWomenMatch))
+        assertTrue(MatchTypeFilter.SINGLES.matches(japanWomenMatch))
+        assertFalse(MatchTypeFilter.DOUBLES.matches(japanWomenMatch))
 
         val resolvedMenSingles = com.tennis.tracker.domain.model.TournamentResolver.resolve(
             rawName = "Kinoshita Group Japan Open",
@@ -286,8 +299,6 @@ class MatchTypeFilterTest {
             tournament = Tournaments.TOKYO_OPEN,
             tour = TourType.ATP
         )
-        assertFalse(MatchTypeFilter.ATP.matches(mislabelledWomenMatch))
-        assertTrue(MatchTypeFilter.WTA.matches(mislabelledWomenMatch))
         assertFalse(TourTierFilter.ATP_TOUR.matches(mislabelledWomenMatch))
         assertTrue(TourTierFilter.WTA_TOUR.matches(mislabelledWomenMatch))
 
@@ -299,8 +310,6 @@ class MatchTypeFilterTest {
             tournament = Tournaments.CHARLESTON_OPEN,
             tour = TourType.WTA
         )
-        assertTrue(MatchTypeFilter.ATP.matches(mislabelledMenMatch))
-        assertFalse(MatchTypeFilter.WTA.matches(mislabelledMenMatch))
         assertTrue(TourTierFilter.ATP_TOUR.matches(mislabelledMenMatch))
         assertFalse(TourTierFilter.WTA_TOUR.matches(mislabelledMenMatch))
     }

@@ -32,12 +32,14 @@ enum class TourTierFilter(val displayName: String, val icon: String) {
         val isWomenGrouping = match?.eventGrouping?.let {
             it.contains("women", ignoreCase = true) ||
                 it.contains("wta", ignoreCase = true) ||
-                it.contains("ladies", ignoreCase = true)
+                it.contains("ladies", ignoreCase = true) ||
+                it.contains("girl", ignoreCase = true)
         } ?: false
         val isMenGrouping = match?.eventGrouping?.let {
             (!isWomenGrouping && it.contains("men", ignoreCase = true)) ||
                 it.contains("atp", ignoreCase = true) ||
-                it.contains("gentlemen", ignoreCase = true)
+                it.contains("gentlemen", ignoreCase = true) ||
+                it.contains("boy", ignoreCase = true)
         } ?: false
 
         return when (this) {
